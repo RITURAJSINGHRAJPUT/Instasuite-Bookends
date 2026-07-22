@@ -1,0 +1,10 @@
+# The root .gitignore's `/node_modules` is root-anchored and won't cover this folder,
+# so ignore it here. Session/cache dirs and the real .env must never be committed.
+node_modules/
+.wwebjs_auth/
+.wwebjs_cache/
+.env
+
+# The root .gitignore's `.env*` would ignore the template too — re-include it (a deeper
+# .gitignore negation overrides the shallower ignore).
+!.env.example

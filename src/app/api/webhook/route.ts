@@ -7,6 +7,7 @@ import { getAIResponse } from "@/lib/ai";
 import { resolveAccountByIgId, type ResolvedAccount } from "@/lib/tenant";
 import { checkMessageQuota } from "@/lib/usage";
 import { withSlot } from "@/lib/queue";
+import { detectOrder, dedupeKey } from "@/lib/triggers";
 
 // The reply is generated in after() (see below), and on Vercel that background
 // work is bounded by THIS function's maxDuration — exceed it and the reply is
@@ -162,8 +163,42 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     await touch(conversation.id);
     await recordUsage(account, ai);
+    await queueOrderNotification(account, conversation, ai.text);
   } catch (error) {
     console.error("Webhook processing error:", error);
+  }
+}
+
+// If the AI reply captured a takeaway order or shared a reservation link, queue a
+// WhatsApp confirmation for the reservation team. Fully isolated by design: the
+// Instagram reply is already sent, this does a single local DB insert (no external
+// I/O, no browser — a self-hosted whatsapp-web.js worker polls the outbox and sends),
+// and it swallows the 23505 dedupe collision exactly as the message insert does, so a
+// notification can never break the reply flow.
+async function queueOrderNotification(
+  account: ResolvedAccount,
+  conversation: { id: string; name?: string | null; username?: string | null },
+  reply: string
+) {
+  try {
+    const detected = detectOrder(reply);
+    if (!detected) return;
+
+    const { error } = await supabaseAdmin.from("whatsapp_outbox").insert({
+      business_id: account.businessId,
+      kind: detected.kind,
+      dedupe_key: dedupeKey(detected.kind, conversation.id, detected.body),
+      account_username: account.username,
+      customer_name: conversation.name || conversation.username || "Guest",
+      body: detected.body,
+    });
+    // 23505 = already queued (an identical re-emitted order); anything else we log
+    // but never rethrow.
+    if (error && error.code !== "23505") {
+      console.warn("whatsapp_outbox insert failed:", error.message);
+    }
+  } catch (err) {
+    console.warn("queueOrderNotification error:", (err as Error).message);
   }
 }
 

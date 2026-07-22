@@ -1,0 +1,19 @@
+{
+  "name": "instasuite-whatsapp-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted whatsapp-web.js worker. Polls the Instasuite whatsapp_outbox table and delivers new takeaway-order / reservation confirmations to the reservation-team WhatsApp group + staff numbers. Runs on any always-on machine you control — NOT on Render (Chrome needs no Docker on a normal OS).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.100.1",
+    "dotenv": "^16.4.5",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}
