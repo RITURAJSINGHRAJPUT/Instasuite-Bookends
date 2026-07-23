@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Receipt,
@@ -8,27 +8,25 @@ import {
   UtensilsCrossed,
   AlertTriangle,
   X,
+  Check,
+  Loader2,
 } from "lucide-react";
 
-// All detected takeaway orders + reservations across accounts, in two columns.
-//
-// The data is DETECTED from chat text (see /api/analytics/accounts) — a heuristic
-// estimate, not a ledger. Reservations track TableCheck links the agent shared;
-// they can't reflect bookings the app never hears back about. Both are labelled as
-// such so a low/zero count reads as truthful, not broken.
+// Real reservations + takeaway orders (the `orders` ledger), captured from the AI's handoff
+// line — a live list, not an estimate. Each pending order can be Confirmed, which DMs the
+// customer a confirmation and marks the row confirmed.
 
-type AccountStat = {
-  account_id: string;
-  username: string | null;
-  name: string | null;
-  takeaway_orders: number;
-  reservations: number;
-  orders: { customer: string; summary: string; at: string }[];
-  reservation_list: { customer: string; detail: string; at: string }[];
+type Order = {
+  id: string;
+  kind: "reservation" | "takeaway";
+  customer_name: string | null;
+  account_id: string | null;
+  account_username: string | null;
+  details: string;
+  status: "pending" | "confirmed" | "cancelled";
+  created_at: string;
+  confirmed_at: string | null;
 };
-
-// A flattened row of either kind, tagged with its account, ready to render/filter.
-type Row = { kind: "order" | "reservation"; customer: string; account: string; body: string; at: string };
 
 type Range = "all" | "week" | "month" | "year";
 const RANGE_DAYS: Record<Exclude<Range, "all">, number> = { week: 7, month: 30, year: 365 };
@@ -44,14 +42,11 @@ function relTime(iso: string): string {
 }
 
 function fullDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-// useSearchParams opts the route out of static prerender unless it's under Suspense
-// — same wrapper pattern as /scripts and /businesses.
+const acctLabel = (o: Order) => (o.account_username ? `@${o.account_username}` : "Account");
+
 export default function OrdersPage() {
   return (
     <Suspense fallback={<p className="p-8 text-xs text-[var(--text-4)]">Loading…</p>}>
@@ -64,26 +59,35 @@ function OrdersInner() {
   const params = useSearchParams();
   const accountParam = params.get("account"); // set by the dashboard card links
 
-  const [stats, setStats] = useState<AccountStat[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [account, setAccount] = useState<string>("all");
   const [range, setRange] = useState<Range>("all");
-  const [selected, setSelected] = useState<Row | null>(null);
+  const [selected, setSelected] = useState<Order | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/orders");
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setOrders(Array.isArray(d) ? d : []);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch("/api/analytics/accounts")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: AccountStat[]) => setStats(Array.isArray(d) ? d : []))
-      .catch(() => setFailed(true))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   useEffect(() => {
     if (accountParam) setAccount(accountParam);
   }, [accountParam]);
 
-  // Escape closes the detail popup.
   useEffect(() => {
     if (!selected) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelected(null);
@@ -91,45 +95,38 @@ function OrdersInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
 
-  const labelFor = (a: AccountStat) => (a.username ? `@${a.username}` : a.name || "Account");
+  async function confirm(id: string) {
+    setConfirming(id);
+    try {
+      const res = await fetch(`/api/orders/${id}/confirm`, { method: "POST" });
+      if (res.ok) {
+        // Reflect immediately; the DM has already gone out.
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "confirmed" } : o)));
+        setSelected((s) => (s && s.id === id ? { ...s, status: "confirmed" } : s));
+      }
+    } finally {
+      setConfirming(null);
+      load();
+    }
+  }
+
+  // Distinct accounts present in the data, for the filter dropdown.
+  const accounts = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const o of orders) if (o.account_id) seen.set(o.account_id, acctLabel(o));
+    return [...seen.entries()].map(([id, label]) => ({ id, label }));
+  }, [orders]);
 
   const cutoff = range === "all" ? 0 : Date.now() - RANGE_DAYS[range] * 86_400_000;
-  const inRange = (at: string) => range === "all" || new Date(at).getTime() >= cutoff;
-
-  const scoped = account === "all" ? stats : stats.filter((a) => a.account_id === account);
-
-  const orders = useMemo(
+  const scoped = useMemo(
     () =>
-      scoped
-        .flatMap((a) =>
-          a.orders.map<Row>((o) => ({
-            kind: "order",
-            customer: o.customer,
-            account: labelFor(a),
-            body: o.summary,
-            at: o.at,
-          }))
-        )
-        .filter((r) => inRange(r.at))
-        .sort((x, y) => y.at.localeCompare(x.at)),
-    [scoped, range] // eslint-disable-line react-hooks/exhaustive-deps
+      orders
+        .filter((o) => account === "all" || o.account_id === account)
+        .filter((o) => range === "all" || new Date(o.created_at).getTime() >= cutoff),
+    [orders, account, range, cutoff]
   );
-  const reservations = useMemo(
-    () =>
-      scoped
-        .flatMap((a) =>
-          a.reservation_list.map<Row>((r) => ({
-            kind: "reservation",
-            customer: r.customer,
-            account: labelFor(a),
-            body: r.detail,
-            at: r.at,
-          }))
-        )
-        .filter((r) => inRange(r.at))
-        .sort((x, y) => y.at.localeCompare(x.at)),
-    [scoped, range] // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const takeaways = scoped.filter((o) => o.kind === "takeaway");
+  const reservations = scoped.filter((o) => o.kind === "reservation");
 
   if (loading) return <p className="p-8 text-xs text-[var(--text-4)]">Loading…</p>;
 
@@ -152,12 +149,11 @@ function OrdersInner() {
             Orders &amp; Reservations
           </h1>
           <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
-            Detected from conversations — an estimate, not a live order system.
+            Confirm to message the customer and mark it done.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Date range — rolling windows, applied client-side on each row's timestamp. */}
           <div className="flex rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-0.5">
             {(["all", "week", "month", "year"] as Range[]).map((r) => (
               <button
@@ -174,7 +170,7 @@ function OrdersInner() {
             ))}
           </div>
 
-          {stats.length > 1 && (
+          {accounts.length > 1 && (
             <select
               value={account}
               onChange={(e) => setAccount(e.target.value)}
@@ -182,9 +178,9 @@ function OrdersInner() {
               className="rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-2.5 py-2 text-xs font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
             >
               <option value="all">All accounts</option>
-              {stats.map((a) => (
-                <option key={a.account_id} value={a.account_id}>
-                  {labelFor(a)}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
                 </option>
               ))}
             </select>
@@ -196,18 +192,20 @@ function OrdersInner() {
         <Column
           icon={<UtensilsCrossed size={15} className="text-[var(--accent)]" />}
           title="Takeaway orders"
-          caption="detected from chats"
-          rows={orders}
+          rows={takeaways}
           empty="No takeaway orders in this range."
           onOpen={setSelected}
+          onConfirm={confirm}
+          confirming={confirming}
         />
         <Column
           icon={<CalendarClock size={15} className="text-[var(--accent)]" />}
           title="Reservations"
-          caption="booking links shared"
           rows={reservations}
-          empty="No reservation links shared in this range. Reservations complete on TableCheck, which doesn't report bookings back to the app."
+          empty="No reservations in this range."
           onOpen={setSelected}
+          onConfirm={confirm}
+          confirming={confirming}
         />
       </div>
 
@@ -223,7 +221,7 @@ function OrdersInner() {
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]">
-                  {selected.kind === "order" ? (
+                  {selected.kind === "takeaway" ? (
                     <Receipt size={16} className="text-[var(--accent)]" />
                   ) : (
                     <CalendarClock size={16} className="text-[var(--accent)]" />
@@ -231,10 +229,10 @@ function OrdersInner() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="truncate text-[14px] font-bold text-[var(--text-1)]">
-                    {selected.customer}
+                    {selected.customer_name || "Guest"}
                   </h3>
                   <p className="truncate text-[11px] text-[var(--text-4)]">
-                    {selected.account} · {fullDate(selected.at)}
+                    {acctLabel(selected)} · {fullDate(selected.created_at)}
                   </p>
                 </div>
               </div>
@@ -247,12 +245,29 @@ function OrdersInner() {
               </button>
             </div>
 
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
-              {selected.kind === "order" ? "Order summary" : "Reservation"} · detected from chat
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+              {selected.kind === "takeaway" ? "Order" : "Reservation"}
             </p>
-            <p className="mt-2 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
-              {selected.body || "No further detail captured."}
+            <p className="mt-1 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+              {selected.details || "No further detail captured."}
             </p>
+
+            <div className="mt-4">
+              {selected.status === "confirmed" ? (
+                <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
+                  <Check size={14} /> Confirmed — the customer was messaged.
+                </span>
+              ) : (
+                <button
+                  onClick={() => confirm(selected.id)}
+                  disabled={confirming === selected.id}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                >
+                  {confirming === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  Confirm &amp; message customer
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -263,17 +278,19 @@ function OrdersInner() {
 function Column({
   icon,
   title,
-  caption,
   rows,
   empty,
   onOpen,
+  onConfirm,
+  confirming,
 }: {
   icon: React.ReactNode;
   title: string;
-  caption: string;
-  rows: Row[];
+  rows: Order[];
   empty: string;
-  onOpen: (r: Row) => void;
+  onOpen: (o: Order) => void;
+  onConfirm: (id: string) => void;
+  confirming: string | null;
 }) {
   return (
     <section className="min-w-0">
@@ -283,7 +300,6 @@ function Column({
         <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">
           {rows.length}
         </span>
-        <span className="text-[10px] text-[var(--text-5)]">{caption}</span>
       </div>
 
       {rows.length === 0 ? (
@@ -292,18 +308,38 @@ function Column({
         </p>
       ) : (
         <div className="space-y-2">
-          {rows.map((r, i) => (
-            <button
-              key={i}
-              onClick={() => onOpen(r)}
-              className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition-colors hover:bg-[var(--surface-1)]"
+          {rows.map((o) => (
+            <div
+              key={o.id}
+              onClick={() => onOpen(o)}
+              className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 transition-colors hover:bg-[var(--surface-1)]"
             >
               <div className="min-w-0">
-                <p className="truncate text-[13px] font-bold text-[var(--text-1)]">{r.customer}</p>
-                <p className="truncate text-[11px] text-[var(--text-4)]">{r.account}</p>
+                <p className="truncate text-[13px] font-bold text-[var(--text-1)]">
+                  {o.customer_name || "Guest"}
+                </p>
+                <p className="truncate text-[11px] text-[var(--text-4)]">
+                  {acctLabel(o)} · {relTime(o.created_at)}
+                </p>
               </div>
-              <span className="flex-shrink-0 text-[10px] text-[var(--text-5)]">{relTime(r.at)}</span>
-            </button>
+              {o.status === "confirmed" ? (
+                <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-[var(--ok-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--ok)]">
+                  <Check size={11} /> Confirmed
+                </span>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfirm(o.id);
+                  }}
+                  disabled={confirming === o.id}
+                  className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                >
+                  {confirming === o.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                  Confirm
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

@@ -7,20 +7,9 @@ import { supabaseAdmin } from "@/lib/supabase";
 // All-time totals, scoped by ctx.accountIds — the same set getContext resolves for
 // every user-driven route, so this can only ever return the caller's own accounts.
 //
-// Reservations and takeaway orders are NOT stored anywhere — reservations complete
-// off-platform on TableCheck (the app never learns the outcome), and takeaways are
-// only free text the AI wrote. So they're DETECTED here by scanning assistant
-// messages: a heuristic estimate, surfaced as such in the UI, never a ledger. This
-// scan is O(messages) — fine at this volume; a real orders table (the extraction
-// pipeline in WHATSAPP-INTEGRATION-PLAN.md) is what this would need to scale.
-
-// An order is "placed" once the agent posts a confirmation/summary. Match the final
-// confirmation, not the in-progress "let me note that down" turns, so one order
-// isn't counted several times.
-const ORDER_RE =
-  /\border summary\b|order\s+(?:is\s+)?confirmed|(?=[\s\S]*\bpickup\b)(?=[\s\S]*\btotal\b)[\s\S]*(?:\boutlet\b|\border:)/i;
-// The only reservation signal that exists: the agent shared a TableCheck link.
-const RESERVATION_RE = /tablecheck\.com|reserve\/(?:message|landing)/i;
+// Reservations and takeaway orders come from the `orders` ledger (captured from the AI's
+// handoff line — see src/lib/order-detect.ts), attributed to an account via each order's
+// conversation. Same source the /orders page uses, so these counts match it.
 
 type Stat = {
   conversations: number;
@@ -44,7 +33,7 @@ export async function GET() {
 
   const ids = ctx.accountIds;
 
-  const [accountsRes, convRes, usageRes, msgRes] = await Promise.all([
+  const [accountsRes, convRes, usageRes, ordersRes] = await Promise.all([
     supabaseAdmin.from("instagram_accounts").select("id, username, name, status").in("id", ids),
     supabaseAdmin
       .from("instagram_conversations")
@@ -55,14 +44,11 @@ export async function GET() {
       .select("instagram_account_id, cost_cents")
       .eq("kind", "ai_reply")
       .in("instagram_account_id", ids),
-    // Assistant messages + their conversation/account, for order/reservation detection.
+    // Captured orders/reservations for these accounts, via each order's conversation.
     // !inner turns the embed into a real join so the account filter actually restricts.
     supabaseAdmin
-      .from("instagram_messages")
-      .select(
-        "content, created_at, instagram_conversations!inner(id, name, username, instagram_account_id)"
-      )
-      .eq("role", "assistant")
+      .from("orders")
+      .select("kind, customer_name, details, created_at, instagram_conversations!inner(instagram_account_id)")
       .in("instagram_conversations.instagram_account_id", ids),
   ]);
 
@@ -101,39 +87,32 @@ export async function GET() {
     s.cost_cents += Number(e.cost_cents ?? 0);
   }
 
-  // Detect orders/reservations, deduped to ONE per conversation. Supabase types an
-  // !inner embed as an array, so the conversation is read as [0].
-  type MsgRow = {
-    content: string | null;
+  // Tally captured orders per account (already deduped at capture time by orders.dedupe_key).
+  // Supabase types an !inner embed as array-or-object, so read the conversation defensively.
+  type OrderRow = {
+    kind: string;
+    customer_name: string | null;
+    details: string;
     created_at: string;
     instagram_conversations:
-      | { id: string; name: string | null; username: string | null; instagram_account_id: string }
-      | { id: string; name: string | null; username: string | null; instagram_account_id: string }[];
+      | { instagram_account_id: string }
+      | { instagram_account_id: string }[];
   };
-  const seenOrder = new Set<string>();
-  const seenResv = new Set<string>();
 
-  for (const m of (msgRes.data ?? []) as MsgRow[]) {
-    const conv = Array.isArray(m.instagram_conversations)
-      ? m.instagram_conversations[0]
-      : m.instagram_conversations;
+  for (const o of (ordersRes.data ?? []) as OrderRow[]) {
+    const conv = Array.isArray(o.instagram_conversations)
+      ? o.instagram_conversations[0]
+      : o.instagram_conversations;
     if (!conv) continue;
     const s = stats.get(conv.instagram_account_id);
     if (!s) continue;
-    const content = m.content ?? "";
-    const customer = conv.name || conv.username || "Guest";
-
-    if (ORDER_RE.test(content) && !seenOrder.has(conv.id)) {
-      seenOrder.add(conv.id);
+    const customer = o.customer_name || "Guest";
+    if (o.kind === "takeaway") {
       s.takeaway_orders++;
-      // Capped, not really truncated — a full order summary is well under this. The
-      // detail popup on the Orders page shows the whole thing.
-      s.orders.push({ customer, summary: content.slice(0, 2000), at: m.created_at });
-    }
-    if (RESERVATION_RE.test(content) && !seenResv.has(conv.id)) {
-      seenResv.add(conv.id);
+      s.orders.push({ customer, summary: o.details, at: o.created_at });
+    } else if (o.kind === "reservation") {
       s.reservations++;
-      s.reservation_list.push({ customer, detail: content.slice(0, 800), at: m.created_at });
+      s.reservation_list.push({ customer, detail: o.details, at: o.created_at });
     }
   }
 

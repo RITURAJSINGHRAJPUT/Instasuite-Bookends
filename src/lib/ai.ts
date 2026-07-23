@@ -43,6 +43,7 @@ const REPLY_GUARD = [
   "Track what the guest has already told you. Never ask again for a detail they have already given (name, date, time, party size, contact, outlet, or order items). Acknowledge what you have and ask only for what is still missing.",
   "Once you have everything needed to place a reservation or takeaway order, confirm it back to the guest and proceed to the hand-off — do not repeat the request for details.",
   "Write only in clear, natural English (or the language the guest is writing in). Never insert stray words or characters from an unrelated language mid-message.",
+  "Don't pre-empt with conditional rules, timing caveats, hours, or disclaimers (e.g. prep delays or cutoff times) — raise a condition only when the guest's actual request triggers it, and answer only what they asked.",
 ].join("\n");
 
 // A safe holding-message result. Every non-answer path returns this shape so the caller
