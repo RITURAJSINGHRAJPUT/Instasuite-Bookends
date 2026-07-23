@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Receipt,
   CircleSlash,
+  MessageCircle,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ROLE_OPTIONS, type Feature } from "@/lib/permissions";
@@ -47,6 +48,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/inbox", label: "Inbox", icon: Inbox, feature: "inbox" },
   { href: "/orders", label: "Orders", icon: Receipt, feature: "orders" },
   { href: "/unavailable", label: "Unavailable", icon: CircleSlash, feature: "unavailable" },
+  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, feature: "whatsapp" },
   { href: "/scripts", label: "AI Scripts", icon: Bot, feature: "scripts" },
 ];
 

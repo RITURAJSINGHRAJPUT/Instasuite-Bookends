@@ -35,9 +35,14 @@ comes back — a WhatsApp outage can never affect an Instagram reply.
 ```sh
 cd worker
 npm install
-cp .env.example .env      # then edit .env
 node index.js             # or: npm start
 ```
+
+> **Env locally:** when run from inside the repo, the worker automatically reads the
+> repo-root `.env` / `.env.local` (and accepts `NEXT_PUBLIC_SUPABASE_URL`), so you
+> usually don't need a `worker/.env` on your dev machine. On a standalone host (VPS)
+> where the repo-root env isn't present, `cp .env.example .env` and fill it in. A
+> `worker/.env` always wins over the repo-root values.
 
 On first run it prints a QR code in the terminal — scan it once with the **sending**
 WhatsApp account (Linked Devices → Link a Device). The session is saved under
@@ -52,6 +57,12 @@ reservation-team group's id into `.env` → `WA_GROUP_ID` and restart.
 `WA_STAFF_NUMBERS` (optional) is a comma-separated list of numbers in E.164 **without**
 the `+` (e.g. `919876543210,919812345678`). Confirmations go to the group **and** each
 number.
+
+> **Destinations are best set on the dashboard.** The app's **WhatsApp** page lets you set
+> the group id + staff numbers per business; the worker reads those from the database
+> (`whatsapp_settings`) and only falls back to `WA_GROUP_ID` / `WA_STAFF_NUMBERS` for a
+> business with nothing configured there. Edits on the dashboard take effect within ~30s.
+> You still get the group id from this worker's startup log — paste it into the dashboard.
 
 ### Keep it running
 
@@ -69,8 +80,8 @@ pm2 save && pm2 startup   # start on boot
 |---|---|
 | `SUPABASE_URL` | Same project as the web app |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key — bypasses RLS to read/update the outbox. **Secret.** |
-| `WA_GROUP_ID` | Reservation-team group id (`…@g.us`) |
-| `WA_STAFF_NUMBERS` | Optional staff numbers, comma-separated, E.164 without `+` |
+| `WA_GROUP_ID` | Fallback reservation-team group id (`…@g.us`) — dashboard config wins |
+| `WA_STAFF_NUMBERS` | Fallback staff numbers, comma-separated, E.164 without `+` — dashboard config wins |
 | `POLL_MS` | Poll interval (default 5000) |
 | `MAX_ATTEMPTS` | Retries before a row is marked `failed` (default 3) |
 | `SESSION_PATH` | Where the WhatsApp session is stored (default `./.wwebjs_auth`) |

@@ -14,13 +14,23 @@
 // ⚠ whatsapp-web.js is unofficial and against WhatsApp's ToS — use a DEDICATED SIM,
 // not the restaurant's public number. See README.md.
 
-require("dotenv").config();
+const path = require("path");
+// Load env from worker/.env first (it wins), then fall back to the repo-root .env.local /
+// .env so running from inside the repo "just works" with the app's existing config. Paths
+// are resolved from __dirname, not the cwd, so it works from either `cd worker && node
+// index.js` or `node worker/index.js`.
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env.local"), override: false });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env"), override: false });
+
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
+const QRCode = require("qrcode"); // image (data-URL) generator, for the dashboard
 const { createClient } = require("@supabase/supabase-js");
 
+// The app defines the URL as NEXT_PUBLIC_SUPABASE_URL; accept that too.
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const {
-  SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
   WA_GROUP_ID = "",
   WA_STAFF_NUMBERS = "",
@@ -30,19 +40,26 @@ const {
 } = process.env;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("✗ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Copy .env.example to .env and fill it in.");
+  console.error(
+    "✗ Missing Supabase config. Looked in worker/.env and the repo-root .env / .env.local.\n" +
+      "  Need SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY."
+  );
   process.exit(1);
 }
 
-const groupId = WA_GROUP_ID.trim();
-const staffNumbers = WA_STAFF_NUMBERS.split(",").map((s) => s.trim()).filter(Boolean);
+// Env destinations are now a FALLBACK. Per-business destinations set in the dashboard
+// (the whatsapp_settings table) take precedence; env still covers any business with no
+// row configured, so existing setups keep working.
+const envGroupId = WA_GROUP_ID.trim();
+const envStaffNumbers = WA_STAFF_NUMBERS.split(",").map((s) => s.trim()).filter(Boolean);
 const pollMs = Number(POLL_MS) || 5000;
 const maxAttempts = Number(MAX_ATTEMPTS) || 3;
 
-if (!groupId && staffNumbers.length === 0) {
+if (!envGroupId && envStaffNumbers.length === 0) {
   console.warn(
-    "⚠ Neither WA_GROUP_ID nor WA_STAFF_NUMBERS is set — messages will have nowhere to go.\n" +
-      "  Set WA_GROUP_ID (printed below once ready) and/or WA_STAFF_NUMBERS, then restart."
+    "⚠ No WA_GROUP_ID / WA_STAFF_NUMBERS env fallback set. Fine IF every business has a\n" +
+      "  destination configured on the dashboard's WhatsApp page; otherwise those messages\n" +
+      "  have nowhere to go. Group ids are printed below once ready."
   );
 }
 
@@ -61,19 +78,81 @@ const client = new Client({
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-client.on("qr", (qr) => {
+// --- Connection status → the dashboard ---
+// Report the whatsapp-web.js state to the singleton `whatsapp_session` row so the
+// WhatsApp page can show "scan this QR" / "connected" / offline. `updated_at` doubles as a
+// heartbeat: the dashboard treats a stale row as the worker being offline. Wrapped so a DB
+// hiccup never affects delivery.
+const SESSION_ID = "default";
+let sessionState = "initializing";
+let sessionQr = null;
+let sessionPhone = null;
+
+async function writeSession() {
+  try {
+    await supabase.from("whatsapp_session").upsert(
+      {
+        id: SESSION_ID,
+        status: sessionState,
+        qr: sessionQr,
+        phone: sessionPhone,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+  } catch (e) {
+    console.warn("whatsapp_session write failed:", e.message);
+  }
+}
+
+client.on("qr", async (qr) => {
   console.log("\nScan this QR with the SENDING WhatsApp account (a dedicated SIM is strongly recommended):\n");
-  qrcode.generate(qr, { small: true });
+  qrcode.generate(qr, { small: true }); // terminal fallback
+  sessionState = "qr";
+  sessionPhone = null;
+  try {
+    sessionQr = await QRCode.toDataURL(qr); // shown on the dashboard
+  } catch {
+    sessionQr = null;
+  }
+  await writeSession();
 });
-client.on("authenticated", () => console.log("✓ authenticated"));
-client.on("auth_failure", (m) => console.error("✗ auth failure:", m));
-client.on("disconnected", (r) => console.warn("⚠ disconnected:", r, "— restart to re-pair if needed"));
+client.on("authenticated", () => {
+  console.log("✓ authenticated");
+  sessionState = "authenticated";
+  sessionQr = null;
+  writeSession();
+});
+client.on("auth_failure", (m) => {
+  console.error("✗ auth failure:", m);
+  sessionState = "auth_failure";
+  sessionQr = null;
+  writeSession();
+});
+client.on("disconnected", (r) => {
+  console.warn("⚠ disconnected:", r, "— restart to re-pair if needed");
+  sessionState = "disconnected";
+  sessionQr = null;
+  sessionPhone = null;
+  writeSession();
+});
 
 client.on("ready", async () => {
   console.log("✓ WhatsApp client ready");
+  sessionState = "connected";
+  sessionQr = null;
+  try {
+    sessionPhone = client.info?.wid?.user || null;
+  } catch {
+    sessionPhone = null;
+  }
+  await writeSession();
   await logGroups();
   startPolling();
 });
+
+// Heartbeat: keep updated_at fresh so the dashboard can detect an offline worker.
+setInterval(writeSession, 15_000);
 
 // One-time helper: print every group this account is in with its id, so you can copy
 // the reservation-team group's id into WA_GROUP_ID (a raw 1203...@g.us is unguessable).
@@ -82,7 +161,7 @@ async function logGroups() {
     const chats = await client.getChats();
     const groups = chats.filter((c) => c.isGroup);
     if (groups.length) {
-      console.log("\nGroups this account is in — copy your reservation-team group's id into WA_GROUP_ID:");
+      console.log("\nGroups this account is in — paste your reservation-team group's id into the\ndashboard's WhatsApp page (or WA_GROUP_ID as a fallback):");
       for (const g of groups) console.log(`  ${g.id._serialized}  —  ${g.name}`);
       console.log("");
     } else {
@@ -101,13 +180,45 @@ function formatMessage(row) {
   return `${header}\nGuest: ${row.customer_name || "Guest"}\n\n${row.body}`;
 }
 
-// Resolve the configured destinations to whatsapp-web.js chat ids each send: the group
-// id verbatim, and each staff number resolved via getNumberId (skips numbers not on
-// WhatsApp instead of throwing).
-async function resolveDestinations() {
+// Per-business destination config from the dashboard, cached briefly so edits there
+// propagate within a poll or two without a DB hit on every send.
+const SETTINGS_TTL_MS = 30_000;
+const settingsCache = new Map(); // business_id -> { at, group_id, staff_numbers }
+
+async function destinationsFor(businessId) {
+  const cached = settingsCache.get(businessId);
+  if (cached && Date.now() - cached.at < SETTINGS_TTL_MS) return cached;
+  let group_id = null;
+  let staff_numbers = [];
+  try {
+    const { data } = await supabase
+      .from("whatsapp_settings")
+      .select("group_id, staff_numbers")
+      .eq("business_id", businessId)
+      .maybeSingle();
+    if (data) {
+      group_id = data.group_id || null;
+      staff_numbers = Array.isArray(data.staff_numbers) ? data.staff_numbers : [];
+    }
+  } catch (e) {
+    console.warn("whatsapp_settings lookup failed:", e.message);
+  }
+  const entry = { at: Date.now(), group_id, staff_numbers };
+  settingsCache.set(businessId, entry);
+  return entry;
+}
+
+// Resolve a row to whatsapp-web.js chat ids: DB config for the row's business wins, env
+// is the fallback. The group id is used verbatim; each staff number is resolved via
+// getNumberId (skips numbers not on WhatsApp instead of throwing).
+async function resolveDestinations(row) {
+  const cfg = await destinationsFor(row.business_id);
+  const group = cfg.group_id || envGroupId;
+  const numbers = cfg.staff_numbers.length ? cfg.staff_numbers : envStaffNumbers;
+
   const targets = [];
-  if (groupId) targets.push(groupId);
-  for (const num of staffNumbers) {
+  if (group) targets.push(group);
+  for (const num of numbers) {
     try {
       const id = await client.getNumberId(num);
       if (id) targets.push(id._serialized);
@@ -121,7 +232,7 @@ async function resolveDestinations() {
 
 async function deliver(row) {
   const text = formatMessage(row);
-  const targets = await resolveDestinations();
+  const targets = await resolveDestinations(row);
   if (targets.length === 0) throw new Error("no reachable destinations configured");
   for (const chatId of targets) {
     await client.sendMessage(chatId, text);
@@ -171,13 +282,23 @@ async function tick() {
 }
 
 function startPolling() {
-  console.log(`polling whatsapp_outbox every ${pollMs}ms → group:${groupId ? "yes" : "no"}, numbers:${staffNumbers.length}`);
+  console.log(
+    `polling whatsapp_outbox every ${pollMs}ms (destinations per business from the dashboard; ` +
+      `env fallback → group:${envGroupId ? "yes" : "no"}, numbers:${envStaffNumbers.length})`
+  );
   tick();
   setInterval(tick, pollMs);
 }
 
 process.on("SIGINT", async () => {
   console.log("\nshutting down…");
+  sessionState = "disconnected";
+  sessionQr = null;
+  try {
+    await writeSession();
+  } catch {
+    /* ignore */
+  }
   try {
     await client.destroy();
   } catch {
@@ -186,4 +307,6 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
+// Seed the status row so the dashboard shows "connecting" before the first event fires.
+writeSession();
 client.initialize();
