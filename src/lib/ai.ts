@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -11,37 +10,51 @@ export type AIOptions = {
 
 export type AIResult = {
   text: string;
-  /** Which provider actually answered — callers meter usage off this. */
-  provider: "claude" | "openrouter" | "none";
+  /** Which provider answered — callers meter usage off this. "none" == Claude couldn't. */
+  provider: "claude" | "none";
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  /**
+   * True when Claude could not produce a usable reply (paused key, outage, or refusal)
+   * and `text` is a safe holding message. The caller should hand the conversation to a
+   * human rather than keep auto-replying. We deliberately do NOT fall back to weaker
+   * models — a wrong or garbled reply to a real customer is worse than a brief holding
+   * message plus a human stepping in.
+   */
+  unavailable: boolean;
 };
 
-// The Anthropic and OpenRouter keys are PLATFORM credentials (we pay, then bill the
-// tenant), not per-tenant — so these clients hold no tenant state and are safe to
-// share. What must never be module-scope is the system prompt: that is per-tenant
-// and is now always passed in.
+// The Anthropic key is a PLATFORM credential (we pay, then bill the tenant), not
+// per-tenant — so this client holds no tenant state and is safe to share. What must
+// never be module-scope is the system prompt: that is per-tenant, always passed in.
 const anthropic = new Anthropic();
 const DEFAULT_CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 
-const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Shown to the guest whenever Claude can't answer. Paired with a human handoff by the
+// caller (see webhook), so "our team will get back to you" is truthful.
+const OUTAGE_MESSAGE = "Thanks for your message! Our team will get back to you shortly.";
+
+// Conversation-hygiene rules appended to EVERY tenant's system prompt. Without them a
+// model can treat each turn fresh — re-asking for details the guest already gave — or
+// narrate its reasoning; these pull it back toward tracking state and staying coherent.
+const REPLY_GUARD = [
+  "Reply with only the message to send to the guest — no preamble, no quotes, no explanation of your reasoning.",
+  "Track what the guest has already told you. Never ask again for a detail they have already given (name, date, time, party size, contact, outlet, or order items). Acknowledge what you have and ask only for what is still missing.",
+  "Once you have everything needed to place a reservation or takeaway order, confirm it back to the guest and proceed to the hand-off — do not repeat the request for details.",
+  "Write only in clear, natural English (or the language the guest is writing in). Never insert stray words or characters from an unrelated language mid-message.",
+].join("\n");
+
+// A safe holding-message result. Every non-answer path returns this shape so the caller
+// can uniformly detect an outage via `unavailable` and hand off to a human.
+const outageResult = (): AIResult => ({
+  text: OUTAGE_MESSAGE,
+  provider: "none",
+  model: null,
+  inputTokens: null,
+  outputTokens: null,
+  unavailable: true,
 });
-
-const FALLBACK_MODELS = [
-  process.env.AI_MODEL,
-  "openai/gpt-oss-20b:free",
-  "nvidia/nemotron-3-nano-30b-a3b:free",
-  "qwen/qwen3-next-80b-a3b-instruct:free",
-  "google/gemma-4-31b-it:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
-].filter(Boolean) as string[];
-
-// Without this, a model can narrate its reasoning or add a preamble into the reply.
-const REPLY_GUARD =
-  "Reply with only the message to send to the guest — no preamble, no quotes, no explanation of your reasoning.";
 
 export async function getAIResponse(
   messages: ChatMessage[],
@@ -50,92 +63,62 @@ export async function getAIResponse(
   const system = `${options.systemPrompt}\n\n${REPLY_GUARD}`;
   const claudeModel = options.model || DEFAULT_CLAUDE_MODEL;
 
-  // --- Primary: Claude ---
   // The API rejects a history that opens with an assistant turn, which is reachable
   // when a human starts the thread from the dashboard's send route.
   const history = [...messages];
   while (history.length && history[0].role !== "user") history.shift();
+  if (!history.length) return outageResult();
 
-  if (history.length) {
-    try {
-      const res = await anthropic.messages.create({
+  try {
+    const res = await anthropic.messages.create({
+      model: claudeModel,
+      max_tokens: 1024,
+      system,
+      messages: history,
+    });
+
+    if (res.stop_reason === "refusal") {
+      // Claude declined — hand to a human rather than push a canned answer.
+      return {
+        text: "Our team will be happy to help! Let me connect you.",
+        provider: "claude",
         model: claudeModel,
-        max_tokens: 1024,
-        system,
-        messages: history,
-      });
-
-      if (res.stop_reason === "refusal") {
-        return {
-          text: "Our team will be happy to help! Let me connect you.",
-          provider: "claude",
-          model: claudeModel,
-          inputTokens: res.usage?.input_tokens ?? null,
-          outputTokens: res.usage?.output_tokens ?? null,
-        };
-      }
-
-      const text = res.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text)
-        .join("")
-        .trim();
-
-      if (text) {
-        return {
-          text,
-          provider: "claude",
-          model: claudeModel,
-          inputTokens: res.usage?.input_tokens ?? null,
-          outputTokens: res.usage?.output_tokens ?? null,
-        };
-      }
-      console.warn("Claude returned no text, falling back to OpenRouter");
-    } catch (err) {
-      console.warn(
-        "Claude call failed, falling back to OpenRouter:",
-        (err as Error).message
-      );
+        inputTokens: res.usage?.input_tokens ?? null,
+        outputTokens: res.usage?.output_tokens ?? null,
+        unavailable: true,
+      };
     }
+
+    const text = res.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+
+    if (text) {
+      return {
+        text,
+        provider: "claude",
+        model: claudeModel,
+        inputTokens: res.usage?.input_tokens ?? null,
+        outputTokens: res.usage?.output_tokens ?? null,
+        unavailable: false,
+      };
+    }
+    console.warn("Claude returned no text — serving a holding message.");
+  } catch (err) {
+    // Paused/invalid key, rate limit, outage, etc. No weak-model fallback: send a safe
+    // holding message and let the caller hand the conversation to a human.
+    console.warn("Claude call failed — serving a holding message:", (err as Error).message);
   }
 
-  // --- Fallback: OpenRouter free models ---
-  const payload = [{ role: "system" as const, content: system }, ...messages];
-
-  for (const model of FALLBACK_MODELS) {
-    try {
-      const completion = await openrouter.chat.completions.create({ model, messages: payload });
-      const content = completion.choices[0]?.message?.content;
-      if (content) {
-        return {
-          text: content,
-          provider: "openrouter",
-          model,
-          inputTokens: completion.usage?.prompt_tokens ?? null,
-          outputTokens: completion.usage?.completion_tokens ?? null,
-        };
-      }
-    } catch (err: unknown) {
-      const status = (err as { status?: number }).status;
-      // Only fall through on rate-limit (429) or not-found (404), throw everything else
-      if (status !== 429 && status !== 404) throw err;
-      console.warn(`Model ${model} failed with ${status}, trying next...`);
-    }
-  }
-
-  return {
-    text: "Sorry, I'm temporarily unavailable. Please try again shortly.",
-    provider: "none",
-    model: null,
-    inputTokens: null,
-    outputTokens: null,
-  };
+  return outageResult();
 }
 
 // Reshape arbitrary business notes (uploaded doc) into the app's DM-agent script
-// format. Claude-only and NOT via getAIResponse: that path caps output at 1024
-// tokens (a full script is larger) and its OpenRouter fallback would produce a
-// poor system prompt. Fills the editor for human review — never auto-saved.
+// format. NOT via getAIResponse: that path caps output at 1024 tokens (a full script
+// is larger) and returns a guest-facing holding message on failure rather than throwing.
+// Fills the editor for human review — never auto-saved.
 const REFORMAT_SYSTEM = (businessName: string) => `You convert a business's raw notes into a system-prompt "script" that governs an AI assistant answering that business's Instagram DMs. The business is "${businessName}".
 
 Reshape the user's content into a clear Markdown script with these sections:

@@ -20,6 +20,7 @@ import {
   ChevronsUpDown,
   ChevronDown,
   Receipt,
+  CircleSlash,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ROLE_OPTIONS, type Feature } from "@/lib/permissions";
@@ -45,6 +46,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid, feature: "overview" },
   { href: "/inbox", label: "Inbox", icon: Inbox, feature: "inbox" },
   { href: "/orders", label: "Orders", icon: Receipt, feature: "orders" },
+  { href: "/unavailable", label: "Unavailable", icon: CircleSlash, feature: "unavailable" },
   { href: "/scripts", label: "AI Scripts", icon: Bot, feature: "scripts" },
 ];
 

@@ -164,6 +164,17 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
     await touch(conversation.id);
     await recordUsage(account, ai);
     await queueOrderNotification(account, conversation, ai.text);
+
+    // Claude couldn't answer (paused key, outage, or refusal): the safe holding message
+    // was already sent above — now hand the conversation to a human so staff pick it up
+    // and future inbound messages aren't auto-answered (the guard near the top of this
+    // function early-returns on mode === "human"). We never serve weak-model output.
+    if (ai.unavailable) {
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ mode: "human" })
+        .eq("id", conversation.id);
+    }
   } catch (error) {
     console.error("Webhook processing error:", error);
   }

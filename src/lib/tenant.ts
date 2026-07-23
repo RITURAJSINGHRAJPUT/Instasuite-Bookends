@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptSecret } from "@/lib/crypto";
+import { getUnavailableBlock } from "@/lib/availability";
 
 // Resolves an inbound webhook to the tenant that owns it.
 // Server-only: it decrypts an access token, which must never reach the browser.
@@ -82,6 +83,11 @@ export async function resolveAccountByIgId(
     return null;
   }
 
+  // Append the business's currently-86'd items so the agent stops offering them.
+  // getUnavailableBlock returns "" on empty or any error, so this never breaks a reply
+  // and appends AFTER the menu (the block states it overrides the menu above it).
+  const unavailable = await getUnavailableBlock(data.business_id);
+
   return {
     accountId: data.id,
     businessId: data.business_id,
@@ -89,6 +95,6 @@ export async function resolveAccountByIgId(
     igAccountId: data.ig_account_id,
     username: data.username,
     accessToken: decryptSecret(data.access_token),
-    systemPrompt: script.content,
+    systemPrompt: unavailable ? `${script.content}\n\n${unavailable}` : script.content,
   };
 }
