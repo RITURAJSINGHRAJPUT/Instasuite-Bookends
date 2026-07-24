@@ -206,6 +206,9 @@ async function queueOrderNotification(
     const { error } = await supabaseAdmin.from("whatsapp_outbox").insert({
       business_id: account.businessId,
       kind: detected.kind,
+      // Normalized outlet key (e.g. 'vesu') so the worker can route to that outlet's
+      // WhatsApp group; null falls back to the business-level default.
+      outlet: detected.outlet,
       dedupe_key: dedupeKey(detected.kind, conversation.id, detected.body),
       account_username: account.username,
       customer_name: conversation.name || conversation.username || "Guest",

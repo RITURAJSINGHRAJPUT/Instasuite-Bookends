@@ -22,6 +22,14 @@ async function ownsBusiness(
 
 type BizRow = { id: string; name: string; client_id: string };
 type SettingsRow = { business_id: string; group_id: string | null; staff_numbers: string[] | null };
+type OutletRouteRow = {
+  id: string;
+  business_id: string;
+  outlet: string;
+  label: string | null;
+  group_id: string | null;
+  staff_numbers: string[] | null;
+};
 type OutboxJoined = {
   id: string;
   kind: string;
@@ -70,6 +78,27 @@ export async function GET() {
     };
   });
 
+  // Per-outlet routes for the caller's businesses (one Instagram account can serve several
+  // outlets; each may have its own WhatsApp destination). Scoped by the bizIds above.
+  const outletRoutes: OutletRouteRow[] = [];
+  if (bizIds.length) {
+    const { data: rData } = await supabaseAdmin
+      .from("whatsapp_outlet_routes")
+      .select("id, business_id, outlet, label, group_id, staff_numbers")
+      .in("business_id", bizIds)
+      .order("label", { ascending: true });
+    for (const r of (rData ?? []) as OutletRouteRow[]) {
+      outletRoutes.push({
+        id: r.id,
+        business_id: r.business_id,
+        outlet: r.outlet,
+        label: r.label ?? "",
+        group_id: r.group_id ?? "",
+        staff_numbers: Array.isArray(r.staff_numbers) ? r.staff_numbers : [],
+      });
+    }
+  }
+
   // Delivery log — newest first, scoped to the caller's businesses.
   let logQuery = supabaseAdmin
     .from("whatsapp_outbox")
@@ -113,7 +142,7 @@ export async function GET() {
     online,
   };
 
-  return Response.json({ businesses, outbox, session });
+  return Response.json({ businesses, outlet_routes: outletRoutes, outbox, session });
 }
 
 // Accepts a comma-separated string or an array; keeps digits only, drops empties, dedupes.

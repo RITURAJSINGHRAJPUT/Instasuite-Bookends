@@ -208,13 +208,55 @@ async function destinationsFor(businessId) {
   return entry;
 }
 
-// Resolve a row to whatsapp-web.js chat ids: DB config for the row's business wins, env
-// is the fallback. The group id is used verbatim; each staff number is resolved via
-// getNumberId (skips numbers not on WhatsApp instead of throwing).
+// Per-OUTLET destination config (dashboard), cached like destinationsFor. Keyed by
+// business_id + normalized outlet key — the webhook stamps that same normalized key onto the
+// outbox row, so this is an exact-equality lookup (no fuzzy matching). A missing row is cached
+// too (negative cache), so outlets without a route don't hit the DB every poll.
+const outletCache = new Map(); // `${business_id}:${outlet}` -> { at, group_id, staff_numbers }
+
+async function outletRouteFor(businessId, outlet) {
+  const key = `${businessId}:${outlet}`;
+  const cached = outletCache.get(key);
+  if (cached && Date.now() - cached.at < SETTINGS_TTL_MS) return cached;
+  let group_id = null;
+  let staff_numbers = [];
+  try {
+    const { data } = await supabase
+      .from("whatsapp_outlet_routes")
+      .select("group_id, staff_numbers")
+      .eq("business_id", businessId)
+      .eq("outlet", outlet)
+      .maybeSingle();
+    if (data) {
+      group_id = data.group_id || null;
+      staff_numbers = Array.isArray(data.staff_numbers) ? data.staff_numbers : [];
+    }
+  } catch (e) {
+    console.warn("whatsapp_outlet_routes lookup failed:", e.message);
+  }
+  const entry = { at: Date.now(), group_id, staff_numbers };
+  outletCache.set(key, entry);
+  return entry;
+}
+
+// Resolve a row to whatsapp-web.js chat ids. Precedence: an outlet-specific route (when the
+// order carries an outlet key and that route has a destination) wins; otherwise the row's
+// business-level config; otherwise env. The group id is used verbatim; each staff number is
+// resolved via getNumberId (skips numbers not on WhatsApp instead of throwing).
 async function resolveDestinations(row) {
-  const cfg = await destinationsFor(row.business_id);
-  const group = cfg.group_id || envGroupId;
-  const numbers = cfg.staff_numbers.length ? cfg.staff_numbers : envStaffNumbers;
+  const outletCfg = row.outlet ? await outletRouteFor(row.business_id, row.outlet) : null;
+  const hasOutletDest = outletCfg && (outletCfg.group_id || outletCfg.staff_numbers.length);
+
+  let group;
+  let numbers;
+  if (hasOutletDest) {
+    group = outletCfg.group_id || null;
+    numbers = outletCfg.staff_numbers;
+  } else {
+    const cfg = await destinationsFor(row.business_id);
+    group = cfg.group_id || envGroupId;
+    numbers = cfg.staff_numbers.length ? cfg.staff_numbers : envStaffNumbers;
+  }
 
   const targets = [];
   if (group) targets.push(group);

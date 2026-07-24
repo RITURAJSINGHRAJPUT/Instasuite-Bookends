@@ -10,6 +10,8 @@ import {
   XCircle,
   Loader2,
   WifiOff,
+  Trash2,
+  Store,
 } from "lucide-react";
 
 // Manage the reservation-team WhatsApp destinations (per business), log in by scanning the
@@ -18,6 +20,17 @@ import {
 // reads that. Finding the group id still comes from the worker's startup log.
 
 type Biz = { id: string; name: string; group_id: string; staff_numbers: string[] };
+
+// A per-outlet destination override. `outlet` is the normalized routing key (e.g. "vesu");
+// `label` is what the user typed (e.g. "Vesu, Surat").
+type Route = {
+  id: string;
+  business_id: string;
+  outlet: string;
+  label: string;
+  group_id: string;
+  staff_numbers: string[];
+};
 
 type Row = {
   id: string;
@@ -147,6 +160,13 @@ export default function WhatsappPage() {
   const [groupId, setGroupId] = useState("");
   const [numbers, setNumbers] = useState("");
 
+  // Per-outlet routes + the add/edit form for the selected business.
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [routeOutlet, setRouteOutlet] = useState("");
+  const [routeGroup, setRouteGroup] = useState("");
+  const [routeNumbers, setRouteNumbers] = useState("");
+  const [routeSaving, setRouteSaving] = useState(false);
+
   const applyBusiness = useCallback((list: Biz[], id: string) => {
     const b = list.find((x) => x.id === id);
     setGroupId(b?.group_id ?? "");
@@ -170,6 +190,7 @@ export default function WhatsappPage() {
         const biz: Biz[] = Array.isArray(data.businesses) ? data.businesses : [];
         setBusinesses(biz);
         setOutbox(Array.isArray(data.outbox) ? data.outbox : []);
+        setRoutes(Array.isArray(data.outlet_routes) ? data.outlet_routes : []);
         setSession(data.session ?? null);
         const first = biz[0]?.id ?? "";
         setBusinessId(first);
@@ -226,7 +247,59 @@ export default function WhatsappPage() {
       .catch(() => {});
   }
 
+  // Pull just the outlet routes (after a route add/edit/delete) without clobbering forms.
+  const refreshRoutes = useCallback(() => {
+    fetchData()
+      .then((d) => setRoutes(Array.isArray(d.outlet_routes) ? d.outlet_routes : []))
+      .catch(() => {});
+  }, [fetchData]);
+
+  async function saveRoute() {
+    if (!businessId || !routeOutlet.trim() || routeSaving) return;
+    setRouteSaving(true);
+    setError(null);
+    const res = await fetch("/api/whatsapp/outlets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_id: businessId,
+        // The typed value is both the display label and the source of the normalized key.
+        outlet: routeOutlet,
+        label: routeOutlet,
+        group_id: routeGroup,
+        staff_numbers: routeNumbers,
+      }),
+    });
+    const data = await res.json();
+    setRouteSaving(false);
+    if (!res.ok) return setError(data?.error || "Couldn't save outlet.");
+    setRouteOutlet("");
+    setRouteGroup("");
+    setRouteNumbers("");
+    refreshRoutes();
+  }
+
+  async function deleteRoute(id: string) {
+    setError(null);
+    const res = await fetch(`/api/whatsapp/outlets?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      return setError(d?.error || "Couldn't delete outlet.");
+    }
+    refreshRoutes();
+  }
+
+  // Load an existing route into the add/edit form (Save upserts by normalized outlet key).
+  function editRoute(r: Route) {
+    setRouteOutlet(r.label || r.outlet);
+    setRouteGroup(r.group_id);
+    setRouteNumbers(r.staff_numbers.join(", "));
+  }
+
   const showBizPicker = businesses.length > 1;
+  const routesForBusiness = routes.filter((r) => r.business_id === businessId);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-8">
@@ -323,6 +396,112 @@ export default function WhatsappPage() {
           </div>
         )}
       </div>
+
+      {/* Per-outlet destinations */}
+      {businesses.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
+          <div className="flex items-center gap-2">
+            <Store size={15} className="text-[var(--accent)]" />
+            <h2 className="text-[14px] font-bold text-[var(--text-1)]">Per-outlet destinations</h2>
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--text-5)]">
+            One account can serve several outlets. Route each outlet&apos;s orders to its own group or
+            numbers — the outlet is read from the order. Any outlet without a route here falls back to
+            the default above.
+          </p>
+
+          {/* Existing routes for the selected business */}
+          <div className="mt-4 space-y-2">
+            {routesForBusiness.length === 0 ? (
+              <p className="text-[12px] text-[var(--text-4)]">No outlet routes yet — add one below.</p>
+            ) : (
+              routesForBusiness.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-bold text-[var(--text-1)]">{r.label || r.outlet}</p>
+                    <p className="truncate text-[11px] text-[var(--text-4)]">
+                      {r.group_id || "no group"}
+                      {r.staff_numbers.length ? ` · ${r.staff_numbers.join(", ")}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-1.5">
+                    <button
+                      onClick={() => editRoute(r)}
+                      className="rounded-lg border border-[var(--border-strong)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-3)] hover:text-[var(--text-1)]"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteRoute(r.id)}
+                      aria-label="Delete outlet route"
+                      className="rounded-lg border border-[var(--border-strong)] p-1.5 text-[var(--text-4)] hover:text-[var(--danger)]"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add / edit an outlet route */}
+          <div className="mt-4 space-y-3 border-t border-[var(--border)] pt-4">
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                Outlet name
+              </span>
+              <input
+                value={routeOutlet}
+                onChange={(e) => setRouteOutlet(e.target.value)}
+                placeholder="Vesu, Surat"
+                className="mt-1 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-[var(--text-5)]">
+                Must match the outlet the agent names in orders (e.g. “Vesu”). Re-saving the same outlet updates it.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                Reservation-team group id
+              </span>
+              <input
+                value={routeGroup}
+                onChange={(e) => setRouteGroup(e.target.value)}
+                placeholder="1203…@g.us"
+                className="mt-1 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                Staff numbers
+              </span>
+              <input
+                value={routeNumbers}
+                onChange={(e) => setRouteNumbers(e.target.value)}
+                placeholder="919876543210, 919812345678"
+                className="mt-1 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-[var(--text-5)]">
+                Comma-separated, with country code, no “+”. Leave the group blank to send to numbers only.
+              </span>
+            </label>
+
+            <button
+              onClick={saveRoute}
+              disabled={routeSaving || !routeOutlet.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+            >
+              <Save size={13} />
+              {routeSaving ? "Saving…" : "Save outlet"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delivery log */}
       <div className="mt-6 mb-2 flex items-center gap-2">
