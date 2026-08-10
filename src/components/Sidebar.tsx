@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,6 +33,36 @@ type Usage = {
   totals: { messages: number };
   subscription: { plans: { name: string; max_messages_per_month: number | null } | null } | null;
 };
+
+// Two-tone chime for a newly-arrived order (takeaway or reservation — both live
+// in the same `orders` table). Synthesized via Web Audio so there's no audio
+// asset to ship; the AudioContext is created lazily since it only ever plays
+// after the user has already interacted with the dashboard (autoplay is fine).
+let orderChimeCtx: AudioContext | null = null;
+function playOrderChime() {
+  try {
+    const AudioCtx =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = orderChimeCtx ?? (orderChimeCtx = new AudioCtx());
+    if (ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    [880, 1320].forEach((freq, i) => {
+      const start = now + i * 0.12;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.2, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    });
+  } catch {
+    // Web Audio unsupported/blocked — the badge count still updates silently.
+  }
+}
 
 // Every destination, tagged with the capability that unlocks it. The list is
 // filtered by the current user's capabilities (from /api/me), so each role sees
@@ -145,6 +175,9 @@ export default function Sidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  // null until the first successful poll, so we never chime on page load just
+  // because pending orders were already sitting there.
+  const prevOrdersCount = useRef<number | null>(null);
 
   useEffect(() => {
     // Shared: Overview and Settings request this too, and this component sits in
@@ -164,7 +197,13 @@ export default function Sidebar() {
       fetch("/api/orders?count=1")
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (!cancelled && d && typeof d.count === "number") setOrdersCount(d.count);
+          if (!cancelled && d && typeof d.count === "number") {
+            if (prevOrdersCount.current !== null && d.count > prevOrdersCount.current) {
+              playOrderChime();
+            }
+            prevOrdersCount.current = d.count;
+            setOrdersCount(d.count);
+          }
         })
         .catch(() => {});
     load();
