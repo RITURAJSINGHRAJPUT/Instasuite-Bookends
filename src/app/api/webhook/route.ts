@@ -90,8 +90,14 @@ export async function POST(request: NextRequest) {
     if (!igAccountId) continue;
 
     for (const messaging of entry.messaging ?? []) {
-      if (messaging?.message?.is_echo) continue;
       if (!messaging?.message?.text) continue;
+      // Echoes fire for EVERY outbound message on the account — ours (AI/dashboard,
+      // already stored when sent) and anything sent manually from the connected
+      // account's own Instagram app. processEcho tells the two apart by mid.
+      if (messaging?.message?.is_echo) {
+        after(() => withSlot(() => processEcho(igAccountId, messaging)));
+        continue;
+      }
       // Bounded: a burst of DMs queues instead of firing unlimited concurrent AI calls.
       after(() => withSlot(() => processMessage(igAccountId, messaging)));
     }
@@ -186,7 +192,7 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
       stripped || "Thanks! I've noted that — our team will confirm and follow up shortly. 🙌";
 
     // Reply FROM this tenant's account: the token is the sender identity.
-    await sendInstagramMessage(igsid, customerText, account.accessToken);
+    const sendResult = await sendInstagramMessage(igsid, customerText, account.accessToken);
 
     const { data: assistantMsg } = await supabaseAdmin
       .from("instagram_messages")
@@ -194,6 +200,9 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
         conversation_id: conversation.id,
         role: "assistant",
         content: customerText,
+        // Recorded so the later echo of this same send (see processEcho below) is
+        // recognized as ours and deduped instead of appearing as a second message.
+        instagram_msg_id: sendResult?.message_id ?? null,
       })
       .select("created_at")
       .single<{ created_at: string }>();
@@ -226,6 +235,51 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
     }
   } catch (error) {
     console.error("Webhook processing error:", error);
+  }
+}
+
+/**
+ * An echo of an outbound message on the account. Sender/recipient are flipped
+ * versus a normal inbound event: the business account is the sender, the guest
+ * is the recipient.
+ *
+ * We never know in advance whether an echo is one of ours (AI reply or a
+ * dashboard-sent reply, both already stored with this same mid when sent) or a
+ * reply typed directly in the Instagram app on someone's phone (never stored
+ * anywhere). Rather than guess, we just try to insert it: the partial unique
+ * index on (conversation_id, instagram_msg_id) makes a duplicate a no-op via
+ * the same 23505 swallow used for inbound retries, while a genuinely new mid
+ * inserts cleanly — which is exactly the phone-app case this exists to catch.
+ */
+async function processEcho(igAccountId: string, messaging: Messaging) {
+  const igsid = messaging.recipient.id;
+  const text = messaging.message.text;
+  const instagramMsgId = messaging.message.mid;
+
+  try {
+    const account = await resolveAccountByIgId(igAccountId);
+    if (!account) return;
+
+    const conversation = await findOrCreateConversation(account, igsid);
+    if (!conversation) return;
+
+    const { error: insertError } = await supabaseAdmin.from("instagram_messages").insert({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: text,
+      instagram_msg_id: instagramMsgId,
+    });
+    if (insertError?.code === "23505") return; // ours — already recorded when sent
+
+    // Genuinely new: sent from outside Instasuite (the phone app). A human is
+    // clearly already handling this guest, so stop the AI from also replying.
+    await touch(conversation.id);
+    await supabaseAdmin
+      .from("instagram_conversations")
+      .update({ mode: "human" })
+      .eq("id", conversation.id);
+  } catch (error) {
+    console.error("Webhook echo processing error:", error);
   }
 }
 

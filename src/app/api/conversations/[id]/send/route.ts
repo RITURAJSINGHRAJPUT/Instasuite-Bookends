@@ -34,11 +34,18 @@ export async function POST(
     return Response.json({ error: "Instagram account unavailable" }, { status: 502 });
   }
 
-  await sendInstagramMessage(conversation.igsid, message.trim(), resolved.accessToken);
+  const sendResult = await sendInstagramMessage(conversation.igsid, message.trim(), resolved.accessToken);
 
   const { data, error } = await supabaseAdmin
     .from("instagram_messages")
-    .insert({ conversation_id: id, role: "assistant", content: message.trim() })
+    .insert({
+      conversation_id: id,
+      role: "assistant",
+      content: message.trim(),
+      // Recorded so the webhook's later echo of this same send is recognized as
+      // ours and deduped instead of appearing as a second message.
+      instagram_msg_id: sendResult?.message_id ?? null,
+    })
     .select()
     .single();
 
