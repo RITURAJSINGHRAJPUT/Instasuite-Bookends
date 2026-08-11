@@ -139,6 +139,14 @@ export async function POST(request: NextRequest) {
   if (!ROLES.includes(role)) {
     return Response.json({ error: `role must be one of ${ROLES.join(", ")}` }, { status: 400 });
   }
+  // super_admin is bootstrapped directly in the database (see README), never
+  // through this endpoint — there's only meant to be one at a time.
+  if (role === "super_admin") {
+    return Response.json(
+      { error: "Super admin can't be assigned here — it's provisioned directly in the database." },
+      { status: 400 }
+    );
+  }
 
   // A subscription (plan) is only meaningful for a `client` tenant — metering keys
   // off the account owner, and staff run the operator's account, not their own.

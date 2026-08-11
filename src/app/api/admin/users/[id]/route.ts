@@ -37,6 +37,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!ROLES.includes(role)) {
       return Response.json({ error: `role must be one of ${ROLES.join(", ")}` }, { status: 400 });
     }
+    // super_admin is bootstrapped directly in the database, never granted through
+    // this endpoint — there's only meant to be one at a time. (Demoting the last
+    // remaining one is still blocked below, separately.)
+    if (role === "super_admin" && target.role !== "super_admin") {
+      return Response.json(
+        { error: "Super admin can't be granted here — it's provisioned directly in the database." },
+        { status: 400 }
+      );
+    }
     if (target.id === session.id && role !== target.role) {
       return Response.json(
         { error: "You can't change your own role. Ask another super admin." },

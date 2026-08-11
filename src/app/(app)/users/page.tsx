@@ -39,6 +39,12 @@ type Plan = { id: string; name: string };
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
 
+// Super admin isn't offered here — there's only ever meant to be one, hand-
+// provisioned directly in the database (see README/ONBOARDING), not granted
+// through this UI. ROLE_OPTIONS itself is untouched so the existing super
+// admin's row still labels/describes correctly.
+const ASSIGNABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter((o) => o.role !== "super_admin");
+
 export default function UsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -289,7 +295,7 @@ export default function UsersPage() {
               onChange={(e) => setNewRole(e.target.value)}
               className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[13px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
             >
-              {ROLE_OPTIONS.map((o) => (
+              {ASSIGNABLE_ROLE_OPTIONS.map((o) => (
                 <option key={o.role} value={o.role}>
                   {o.label}
                 </option>
@@ -407,7 +413,14 @@ export default function UsersPage() {
                   onChange={(e) => mutate(detail.id, { role: e.target.value })}
                   className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-40"
                 >
-                  {ROLE_OPTIONS.map((o) => (
+                  {/* super_admin isn't assignable here, but if this row already IS
+                      one (only possible for its own disabled row — is_self blocks
+                      changing it), its own option must still exist or the select
+                      would render blank against a value with no matching option. */}
+                  {(detail.role === "super_admin"
+                    ? [ROLE_OPTIONS.find((o) => o.role === "super_admin")!, ...ASSIGNABLE_ROLE_OPTIONS]
+                    : ASSIGNABLE_ROLE_OPTIONS
+                  ).map((o) => (
                     <option key={o.role} value={o.role}>
                       {o.label}
                     </option>
