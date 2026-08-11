@@ -66,9 +66,10 @@ export const config = {
   // text after the slash is empty, so `.*` would match and gate the landing
   // page. `.+` requires at least one character, so "/" falls through while
   // "/inbox", "/dashboard", "/settings", "/admin" still match.
-  // api/leads is deliberately NOT excluded: in solo mode the public "request
-  // access" form is gone, so this endpoint is now gated (a session is required).
-  // Re-add `api/leads` here to reopen public lead capture for multi-tenant mode.
+  // api/leads IS excluded: it's the public request-access endpoint behind the
+  // landing page's form and must be reachable by anonymous visitors. It has its
+  // own rate limiting + honeypot (see src/app/api/leads/route.ts) since there's
+  // no session to gate it.
   //
   // The `.*\.(png|...)` clause excludes static image assets in public/ (the logo,
   // the favicon). Without it the proxy redirects them to /login: the logo request
@@ -77,6 +78,6 @@ export const config = {
   // logged-out visitor's image request was redirected too. Images in public/ are
   // inherently public, so gating them was never intended.
   matcher: [
-    "/((?!api/webhook|api/cron|auth/callback|auth/reset|login|privacy|terms|data-deletion|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif)).+)",
+    "/((?!api/webhook|api/cron|api/leads|auth/callback|auth/reset|login|privacy|terms|data-deletion|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif)).+)",
   ],
 };

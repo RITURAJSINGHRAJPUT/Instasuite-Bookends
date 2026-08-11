@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-// The landing page is a Server Component (it reads pricing straight from the DB),
-// so the interactive form lives here as a client island.
+// The landing page is a Server Component, so the interactive form lives here
+// as a client island.
 export default function RequestAccessForm() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
