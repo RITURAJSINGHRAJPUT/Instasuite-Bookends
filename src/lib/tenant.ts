@@ -8,6 +8,7 @@ import { getUnavailableBlock } from "@/lib/availability";
 export type ResolvedAccount = {
   accountId: string;
   businessId: string;
+  businessName: string;
   clientId: string;
   igAccountId: string;
   username: string | null;
@@ -27,6 +28,7 @@ type AccountRow = {
   script_id: string | null;
   businesses: {
     id: string;
+    name: string;
     client_id: string;
     status: string;
     default_script_id: string | null;
@@ -45,7 +47,7 @@ export async function resolveAccountByIgId(
   const { data, error } = await supabaseAdmin
     .from("instagram_accounts")
     .select(
-      "id, business_id, ig_account_id, username, access_token, status, script_id, businesses(id, client_id, status, default_script_id)"
+      "id, business_id, ig_account_id, username, access_token, status, script_id, businesses(id, name, client_id, status, default_script_id)"
     )
     .eq("ig_account_id", igAccountId)
     .maybeSingle<AccountRow>();
@@ -91,6 +93,7 @@ export async function resolveAccountByIgId(
   return {
     accountId: data.id,
     businessId: data.business_id,
+    businessName: business.name,
     clientId: business.client_id,
     igAccountId: data.ig_account_id,
     username: data.username,

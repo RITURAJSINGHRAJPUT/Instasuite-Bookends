@@ -7,6 +7,13 @@ import { getAIResponse } from "@/lib/ai";
 import { resolveAccountByIgId, type ResolvedAccount } from "@/lib/tenant";
 import { checkMessageQuota } from "@/lib/usage";
 import { withSlot } from "@/lib/queue";
+import { debounce, DEBOUNCE_MS } from "@/lib/debounce";
+import {
+  isNoIntentOpener,
+  isTrivialAck,
+  cannedWelcome,
+  mergeConsecutiveTurns,
+} from "@/lib/message-triage";
 import {
   detectHandoff,
   detectReview,
@@ -136,8 +143,80 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     if (conversation.mode === "human") return;
 
+    // Cost pre-filter — runs before anything that touches the paid AI. A bare
+    // emoji or "thanks" used to trigger a full Claude call with the ~19K-char
+    // script every single time; neither case needs the model at all.
+    const { count: messageCount } = await supabaseAdmin
+      .from("instagram_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversation.id);
+    const isFirstMessage = messageCount === 1;
+
+    if (isFirstMessage && isNoIntentOpener(text)) {
+      // Faithful stand-in for the AI's own scripted welcome line — no AI call.
+      await sendCannedReply(account, conversation.id, igsid, cannedWelcome(account.businessName));
+      return;
+    }
+    if (!isFirstMessage && isTrivialAck(text)) {
+      // A bare emoji or "thanks" needs no reply at all — nothing sent, nothing generated.
+      return;
+    }
+
+    // Real content: debounce so a burst of several quick messages ("hi", "table
+    // for 2", "tonight 8pm" as three bubbles) becomes ONE AI call, not three.
+    // Already running inside the caller's after() background task — no need to
+    // nest another after() here, and the setTimeout it schedules relies on this
+    // being a single long-lived process (Render), same constraint queue.ts
+    // already documents for its own in-process concurrency gate.
+    debounce(conversation.id, DEBOUNCE_MS, () => {
+      withSlot(() => generateAndSendReply(igAccountId, conversation.id)).catch((error) =>
+        console.error("Debounced reply error:", error)
+      );
+    });
+  } catch (error) {
+    console.error("Webhook processing error:", error);
+  }
+}
+
+// Sends a fixed, non-AI reply (the canned first-message welcome). Mirrors the
+// storage side of generateAndSendReply's real send, minus everything AI-only.
+async function sendCannedReply(
+  account: ResolvedAccount,
+  conversationId: string,
+  igsid: string,
+  text: string
+) {
+  const sendResult = await sendInstagramMessage(igsid, text, account.accessToken);
+  await supabaseAdmin.from("instagram_messages").insert({
+    conversation_id: conversationId,
+    role: "assistant",
+    content: text,
+    instagram_msg_id: sendResult?.message_id ?? null,
+  });
+  await touch(conversationId);
+}
+
+// The AI-calling path, run after the debounce window settles. Re-resolves the
+// account and re-fetches the conversation fresh rather than trusting a closure
+// captured several seconds ago — mode may have changed in the meantime (e.g. a
+// manual phone reply arrived and handed the conversation to a human).
+async function generateAndSendReply(igAccountId: string, conversationId: string) {
+  try {
+    const account = await resolveAccountByIgId(igAccountId);
+    if (!account) return;
+
+    const { data: conversation } = await supabaseAdmin
+      .from("instagram_conversations")
+      .select("*")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conversation) return;
+    if (conversation.mode === "human") return;
+
+    const igsid = conversation.igsid;
+
     // Plan quota. Checked BEFORE the AI call, because the AI call is the thing
-    // that costs money. The inbound message is still stored above, so nothing is
+    // that costs money. The inbound message(s) are already stored, so nothing is
     // lost — the tenant just stops getting auto-replies until the period rolls
     // over or they upgrade.
     const quota = await checkMessageQuota(account.clientId);
@@ -154,29 +233,39 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
     // exception is when the guest clearly asks about a past order: then we lift the filter for
     // this single turn so the AI has the full transcript to answer from.
     const resetAt = (conversation as { context_reset_at?: string | null }).context_reset_at ?? null;
-    const wantsPast = refersToPastOrder(text);
 
-    let historyQuery = supabaseAdmin
+    const { data: rawHistory } = await supabaseAdmin
       .from("instagram_messages")
-      .select("role, content")
+      .select("role, content, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true })
       .limit(20);
-    if (resetAt && !wantsPast) historyQuery = historyQuery.gt("created_at", resetAt);
+    const rows = rawHistory || [];
 
-    const { data: history } = await historyQuery;
+    // Debounce may have batched several guest bubbles since the last assistant
+    // turn — check intent across all of them, not just the very last one.
+    const trailingUserText = [];
+    for (let i = rows.length - 1; i >= 0 && rows[i].role === "user"; i--) {
+      trailingUserText.unshift(rows[i].content);
+    }
+    const wantsPast = refersToPastOrder(trailingUserText.join("\n"));
+
+    const filtered =
+      resetAt && !wantsPast ? rows.filter((m) => m.created_at > resetAt) : rows;
 
     // This tenant's script — not a module-level constant.
     const ai = await getAIResponse(
-      (history || [])
-        .map((m) => ({
-          role: m.role as "user" | "assistant",
-          // Never feed a raw handoff line back to the model — a previously-leaked one in the history
-          // makes it echo the same order every turn (a loop). Strip it from assistant turns; a turn
-          // that was ONLY a handoff line becomes empty and is dropped below.
-          content: m.role === "assistant" ? stripHandoff(m.content).trim() : m.content,
-        }))
-        .filter((m) => m.content.length > 0),
+      mergeConsecutiveTurns(
+        filtered
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            // Never feed a raw handoff line back to the model — a previously-leaked one in the history
+            // makes it echo the same order every turn (a loop). Strip it from assistant turns; a turn
+            // that was ONLY a handoff line becomes empty and is dropped below.
+            content: m.role === "assistant" ? stripHandoff(m.content).trim() : m.content,
+          }))
+          .filter((m) => m.content.length > 0)
+      ),
       { systemPrompt: account.systemPrompt }
     );
 
@@ -223,7 +312,7 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
     if (detectedReview) await captureReview(account, conversation, detectedReview);
 
     // Hand the conversation to a human — future inbound messages aren't auto-answered (the guard
-    // near the top of this function early-returns on mode === "human"), so staff pick it up. Two
+    // near the top of processMessage early-returns on mode === "human"), so staff pick it up. Two
     // reasons: (a) Claude couldn't answer (paused key, outage, or refusal) — the safe holding
     // message was already sent above and we never serve weak-model output; or (b) the AI flagged a
     // REVIEW matter (collab/complaint/…) that a person must take over.
