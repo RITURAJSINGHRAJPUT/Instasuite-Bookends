@@ -48,7 +48,9 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Idempotent: already confirmed → don't re-send the DM.
+  // Idempotent: already confirmed → don't re-send the DM. (Fast-path only — the
+  // real guard against a double-send is the atomic claim below, since two
+  // requests can both read "pending" here before either has written back.)
   if (order.status === "confirmed") {
     return Response.json({ id: order.id, status: "confirmed", already: true });
   }
@@ -68,6 +70,24 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: "Instagram account unavailable" }, { status: 502 });
   }
 
+  // Atomic claim BEFORE sending anything: a double-click, or two staff members
+  // confirming at once, must not both pass the check above and both send the
+  // DM. The conditional `eq("status", order.status)` only succeeds for
+  // whichever request's write lands first — the loser affects zero rows and
+  // never sends a duplicate message.
+  const { data: claimed, error: claimError } = await supabaseAdmin
+    .from("orders")
+    .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", order.status)
+    .select("id, status, confirmed_at")
+    .maybeSingle();
+  if (claimError) return Response.json({ error: claimError.message }, { status: 500 });
+  if (!claimed) {
+    // Someone else's request already claimed it between our read and this write.
+    return Response.json({ id: order.id, status: "confirmed", already: true });
+  }
+
   const message = confirmationText(order.kind, order.details);
   await sendInstagramMessage(order.igsid, message, resolved.accessToken);
 
@@ -84,12 +104,5 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
       .eq("id", order.conversation_id);
   }
 
-  const { data: updated, error } = await supabaseAdmin
-    .from("orders")
-    .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("id, status, confirmed_at")
-    .single();
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json(updated);
+  return Response.json(claimed);
 }

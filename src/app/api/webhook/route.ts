@@ -250,6 +250,20 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     }
     const wantsPast = refersToPastOrder(trailingUserText.join("\n"));
 
+    // The guest is revising a "finished" order — it's not really finished
+    // anymore. Clear the reset boundary (not just lift it for this one turn)
+    // so a bare follow-up answer ("4:30 PM", answering the AI's own "what
+    // time?") keeps seeing full history too, instead of losing the order the
+    // moment the guest's reply no longer contains a trigger keyword itself.
+    // A new handoff line (see below) re-stamps a fresh boundary once the
+    // revised order is actually finalized.
+    if (resetAt && wantsPast) {
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ context_reset_at: null })
+        .eq("id", conversation.id);
+    }
+
     const filtered =
       resetAt && !wantsPast ? rows.filter((m) => m.created_at > resetAt) : rows;
 
