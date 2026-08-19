@@ -12,6 +12,7 @@ import {
   Clock,
   Heart,
   Loader2,
+  Ban,
 } from "lucide-react";
 
 // Real reservations + takeaway orders (the `orders` ledger), captured from the AI's handoff
@@ -30,6 +31,8 @@ type Order = {
   confirmed_at: string | null;
   scheduled_at: string | null;
   feedback_sent_at: string | null;
+  /** A guest asked to cancel this in-conversation — flagged from the Review pipeline. */
+  cancellationRequested: boolean;
 };
 
 type Range = "all" | "week" | "month" | "year";
@@ -86,6 +89,7 @@ function OrdersInner() {
   const [range, setRange] = useState<Range>("all");
   const [selected, setSelected] = useState<Order | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState<string | null>(null);
   const [sendingFeedback, setSendingFeedback] = useState<string | null>(null);
   const [feedbackErr, setFeedbackErr] = useState<{ id: string; msg: string } | null>(null);
 
@@ -128,6 +132,25 @@ function OrdersInner() {
       }
     } finally {
       setConfirming(null);
+      load();
+    }
+  }
+
+  async function cancelOrder(id: string) {
+    setCanceling(id);
+    try {
+      const res = await fetch(`/api/orders/${id}/cancel`, { method: "POST" });
+      if (res.ok) {
+        // Reflect immediately; the DM has already gone out.
+        setOrders((prev) =>
+          prev.map((o) => (o.id === id ? { ...o, status: "cancelled", cancellationRequested: false } : o))
+        );
+        setSelected((s) =>
+          s && s.id === id ? { ...s, status: "cancelled", cancellationRequested: false } : s
+        );
+      }
+    } finally {
+      setCanceling(null);
       load();
     }
   }
@@ -242,6 +265,8 @@ function OrdersInner() {
           onOpen={setSelected}
           onConfirm={confirm}
           confirming={confirming}
+          onCancel={cancelOrder}
+          canceling={canceling}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
           feedbackErr={feedbackErr}
@@ -254,6 +279,8 @@ function OrdersInner() {
           onOpen={setSelected}
           onConfirm={confirm}
           confirming={confirming}
+          onCancel={cancelOrder}
+          canceling={canceling}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
           feedbackErr={feedbackErr}
@@ -296,6 +323,13 @@ function OrdersInner() {
               </button>
             </div>
 
+            {selected.cancellationRequested && (
+              <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--warn-soft)] px-3 py-2 text-[12px] font-bold text-[var(--warn)]">
+                <AlertTriangle size={13} className="flex-shrink-0" />
+                The guest asked to cancel this — review and confirm below.
+              </p>
+            )}
+
             {selected.scheduled_at && (
               <p className="mt-3 flex items-center gap-1.5 text-[12px] font-bold text-[var(--text-1)]">
                 <Clock size={13} className="flex-shrink-0 text-[var(--accent)]" />
@@ -310,10 +344,14 @@ function OrdersInner() {
               {selected.details || "No further detail captured."}
             </p>
 
-            <div className="mt-4">
+            <div className="mt-4 space-y-2">
               {selected.status === "confirmed" ? (
                 <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
                   <Check size={14} /> Confirmed — the customer was messaged.
+                </span>
+              ) : selected.status === "cancelled" ? (
+                <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--danger)]">
+                  <Ban size={14} /> Cancelled — the customer was messaged.
                 </span>
               ) : (
                 <button
@@ -323,6 +361,17 @@ function OrdersInner() {
                 >
                   {confirming === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Confirm &amp; message customer
+                </button>
+              )}
+
+              {selected.status !== "cancelled" && (
+                <button
+                  onClick={() => cancelOrder(selected.id)}
+                  disabled={canceling === selected.id}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--danger)]/30 px-4 py-2.5 text-sm font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
+                >
+                  {canceling === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                  Cancel &amp; message customer
                 </button>
               )}
             </div>
@@ -371,6 +420,8 @@ function Column({
   onOpen,
   onConfirm,
   confirming,
+  onCancel,
+  canceling,
   onFeedback,
   sendingFeedback,
   feedbackErr,
@@ -382,6 +433,8 @@ function Column({
   onOpen: (o: Order) => void;
   onConfirm: (id: string) => void;
   confirming: string | null;
+  onCancel: (id: string) => void;
+  canceling: string | null;
   onFeedback: (id: string) => void;
   sendingFeedback: string | null;
   feedbackErr: { id: string; msg: string } | null;
@@ -424,9 +477,19 @@ function Column({
               </div>
 
               <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                {o.cancellationRequested && (
+                  <span className="flex items-center gap-1 rounded-full bg-[var(--warn-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--warn)]">
+                    <AlertTriangle size={11} /> Cancel requested
+                  </span>
+                )}
+
                 {o.status === "confirmed" ? (
                   <span className="flex items-center gap-1 rounded-full bg-[var(--ok-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--ok)]">
                     <Check size={11} /> Confirmed
+                  </span>
+                ) : o.status === "cancelled" ? (
+                  <span className="flex items-center gap-1 rounded-full bg-[var(--danger-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--danger)]">
+                    <Ban size={11} /> Cancelled
                   </span>
                 ) : (
                   <button
@@ -439,6 +502,20 @@ function Column({
                   >
                     {confirming === o.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                     Confirm
+                  </button>
+                )}
+
+                {o.status !== "cancelled" && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCancel(o.id);
+                    }}
+                    disabled={canceling === o.id}
+                    className="flex items-center gap-1 rounded-lg border border-[var(--danger)]/30 px-3 py-1.5 text-[11px] font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
+                  >
+                    {canceling === o.id ? <Loader2 size={11} className="animate-spin" /> : <Ban size={11} />}
+                    Cancel
                   </button>
                 )}
 

@@ -29,7 +29,7 @@ export type DetectedOrder = {
 };
 
 /** The known review buckets. Free-text `Type:` is normalised to one of these; anything else → "other". */
-export type ReviewCategory = "collaboration" | "complaint" | "billing" | "event" | "other";
+export type ReviewCategory = "collaboration" | "complaint" | "billing" | "event" | "cancellation" | "other";
 export type DetectedReview = {
   /** The exact handoff line (used for the dedupe key). */
   line: string;
@@ -45,6 +45,7 @@ export type DetectedReview = {
 // "payment issue" → billing, etc.; unrecognised (or missing) falls back to "other".
 function normalizeCategory(type: string | undefined): ReviewCategory {
   const t = (type || "").toLowerCase();
+  if (/cancel/.test(t)) return "cancellation";
   if (/collab|partner|promo|sponsor/.test(t)) return "collaboration";
   if (/complain|issue|problem|refund|angry/.test(t)) return "complaint";
   if (/bill|payment|invoice|charge/.test(t)) return "billing";

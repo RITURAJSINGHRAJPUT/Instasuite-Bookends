@@ -70,8 +70,39 @@ export async function GET(request: NextRequest) {
       conversation_id: r.conversation_id,
       account_id: r.instagram_account_id ?? null,
       account_username: acc?.username ?? null,
+      cancellationRequested: false,
     };
   });
+
+  // Surface open cancellation requests (captured via the Review pipeline, see
+  // src/lib/order-detect.ts's "cancellation" category) directly on the order
+  // they refer to, so staff see it in Orders without a separate trip to Review.
+  const { data: cancellationRequests } = await supabaseAdmin
+    .from("review_items")
+    .select("conversation_id")
+    .eq("category", "cancellation")
+    .eq("status", "pending")
+    .in("instagram_account_id", ctx.accountIds);
+
+  const requestedConversations = new Set(
+    (cancellationRequests ?? []).map((r) => r.conversation_id).filter(Boolean)
+  );
+  if (requestedConversations.size > 0) {
+    // `rows` is already ordered newest-first, so the first non-cancelled order
+    // per conversation is the one the request most likely refers to.
+    const flagged = new Set<string>();
+    for (const row of rows) {
+      if (
+        row.conversation_id &&
+        requestedConversations.has(row.conversation_id) &&
+        row.status !== "cancelled" &&
+        !flagged.has(row.conversation_id)
+      ) {
+        row.cancellationRequested = true;
+        flagged.add(row.conversation_id);
+      }
+    }
+  }
 
   return Response.json(rows);
 }

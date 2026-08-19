@@ -16,7 +16,7 @@ import {
 // captured from the AI's REVIEW line. Each pending item can be Marked reviewed, which flips the row
 // (no DM — the reply happens in the Inbox, where the chat was moved to human mode at capture).
 
-type Category = "collaboration" | "complaint" | "billing" | "event" | "other";
+type Category = "collaboration" | "complaint" | "billing" | "event" | "cancellation" | "other";
 type ReviewItem = {
   id: string;
   category: Category;
@@ -35,9 +35,10 @@ const CAT_LABEL: Record<Category, string> = {
   complaint: "Complaint",
   billing: "Billing",
   event: "Event",
+  cancellation: "Cancellation",
   other: "Other",
 };
-const CAT_ORDER: Category[] = ["collaboration", "complaint", "billing", "event", "other"];
+const CAT_ORDER: Category[] = ["cancellation", "collaboration", "complaint", "billing", "event", "other"];
 
 function relTime(iso: string): string {
   const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
