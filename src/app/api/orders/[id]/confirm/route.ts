@@ -4,6 +4,7 @@ import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
 import { resolveAccountByIgId } from "@/lib/tenant";
 import { sendInstagramMessage } from "@/lib/instagram";
+import { cancelOrderAndNotify, type OrderForCancel } from "@/lib/orders";
 
 // Confirm an order: mark it confirmed AND DM the customer a confirmation. Uses the order's OWN snapshotted
 // igsid + instagram_account_id (not the conversation), so it still works if the chat was deleted — the
@@ -104,5 +105,40 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
       .eq("id", order.conversation_id);
   }
 
-  return Response.json(claimed);
+  // A guest who cancelled a reservation and then booked this instead never gets
+  // a separate "please also click Cancel" step — confirming the replacement
+  // auto-cancels whatever it superseded. Only fires when there's an actual open
+  // cancellation request for this conversation (never speculatively); the AI
+  // still never finalizes anything on its own — this is triggered by the same
+  // human Confirm click as always.
+  let supersededOrder: { id: string; status: string } | null = null;
+  if (order.conversation_id) {
+    const { data: pendingCancellation } = await supabaseAdmin
+      .from("review_items")
+      .select("id")
+      .eq("conversation_id", order.conversation_id)
+      .eq("category", "cancellation")
+      .eq("status", "pending")
+      .limit(1)
+      .maybeSingle();
+
+    if (pendingCancellation) {
+      const { data: otherOrder } = await supabaseAdmin
+        .from("orders")
+        .select("id, kind, status, igsid, instagram_account_id, conversation_id")
+        .eq("conversation_id", order.conversation_id)
+        .neq("id", order.id)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<OrderForCancel>();
+
+      if (otherOrder) {
+        const cancelResult = await cancelOrderAndNotify(otherOrder);
+        if (cancelResult.ok) supersededOrder = { id: cancelResult.id, status: cancelResult.status };
+      }
+    }
+  }
+
+  return Response.json({ ...claimed, supersededOrder });
 }

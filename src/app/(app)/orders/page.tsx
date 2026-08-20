@@ -126,9 +126,25 @@ function OrdersInner() {
     try {
       const res = await fetch(`/api/orders/${id}/confirm`, { method: "POST" });
       if (res.ok) {
+        const d = await res.json().catch(() => null);
         // Reflect immediately; the DM has already gone out.
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "confirmed" } : o)));
         setSelected((s) => (s && s.id === id ? { ...s, status: "confirmed" } : s));
+
+        // Confirming can auto-cancel whatever this order superseded (e.g. the
+        // guest cancelled a reservation, then booked this takeaway instead) —
+        // reflect that second change immediately too, without waiting for load().
+        const supersededId: string | undefined = d?.supersededOrder?.id;
+        if (supersededId) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === supersededId ? { ...o, status: "cancelled", cancellationRequested: false } : o
+            )
+          );
+          setSelected((s) =>
+            s && s.id === supersededId ? { ...s, status: "cancelled", cancellationRequested: false } : s
+          );
+        }
       }
     } finally {
       setConfirming(null);
