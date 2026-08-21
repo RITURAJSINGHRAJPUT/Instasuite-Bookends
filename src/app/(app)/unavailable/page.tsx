@@ -112,7 +112,7 @@ export default function UnavailablePage() {
   const [businessId, setBusinessId] = useState("");
 
   useEffect(() => {
-    fetch("/api/businesses")
+    fetch("/api/unavailable/businesses")
       .then((r) => (r.ok ? r.json() : []))
       .then((d: Biz[]) => {
         const list = Array.isArray(d)

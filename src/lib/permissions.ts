@@ -26,14 +26,14 @@ export type Role = "super_admin" | "admin" | "manager" | "agent" | "client";
 
 // What each role can reach. super_admin has everything; admin has everything but
 // Users (can't manage teammates); manager runs the day-to-day (no Settings/Admin/
-// Businesses — connecting/disconnecting Instagram accounts stays admin+);
-// agent works the Inbox only; client is the legacy own-scoped tenant.
+// Businesses/Scripts — connecting Instagram accounts and editing the AI script
+// stay admin+); agent works the Inbox only; client is the legacy own-scoped tenant.
 // `orders` tracks `overview`: it reads the same overview-gated analytics endpoint,
 // so its viewers must be a subset of overview's or they'd 404 on their own page.
 export const ROLE_CAPABILITIES: Record<Role, Feature[]> = {
   super_admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "settings", "admin", "users"],
   admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "settings", "admin"],
-  manager: ["overview", "inbox", "orders", "review", "unavailable", "scripts"],
+  manager: ["overview", "inbox", "orders", "review", "unavailable"],
   agent: ["inbox"],
   client: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "settings"],
 };
@@ -114,7 +114,7 @@ export function featureForPath(pathname: string): Feature | null {
 // what each unlocks. Ordered least → most privileged.
 export const ROLE_OPTIONS: { role: Role; label: string; description: string }[] = [
   { role: "agent", label: "Agent", description: "Inbox only — read and reply to conversations." },
-  { role: "manager", label: "Manager", description: "Inbox, AI Scripts and Overview — no Businesses." },
+  { role: "manager", label: "Manager", description: "Inbox and Overview — no Businesses or AI Scripts." },
   { role: "admin", label: "Admin", description: "Everything except managing users." },
   { role: "super_admin", label: "Super admin", description: "Full access, including user management." },
   { role: "client", label: "Client", description: "Legacy tenant — sees only their own data." },
