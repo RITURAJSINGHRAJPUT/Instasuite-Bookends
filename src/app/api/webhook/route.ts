@@ -84,14 +84,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // TEMPORARY — full-payload capture for unsend/edit investigation (v2: the
-  // first pass only logged messaging entries missing .message.text, which
-  // would miss a same-mid edit resent with the original mid, or a delete
-  // signaled outside `messaging` entirely). Logged unconditionally, before
-  // any filtering, so nothing can hide a second time. Remove once confirmed
-  // either way what (if anything) Meta sends for these actions.
-  console.log("WEBHOOK_RAW_BODY:", raw);
-
   if (body.object !== "instagram") {
     return Response.json({ status: "ignored" });
   }
@@ -145,14 +137,7 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
       content: text,
       instagram_msg_id: instagramMsgId,
     });
-    if (insertError?.code === "23505") {
-      // TEMPORARY — see the WEBHOOK_RAW_BODY log above. If Instagram signals an
-      // edit by resending the same mid with different text, it would hit this
-      // exact branch and previously vanish with zero trace. Logging the
-      // incoming text so it can be diffed against what's already stored.
-      console.log("DEDUPE_COLLISION:", { mid: instagramMsgId, text });
-      return;
-    }
+    if (insertError?.code === "23505") return;
 
     await touch(conversation.id);
 
@@ -387,13 +372,7 @@ async function processEcho(igAccountId: string, messaging: Messaging) {
       content: text,
       instagram_msg_id: instagramMsgId,
     });
-    if (insertError?.code === "23505") {
-      // TEMPORARY — see the WEBHOOK_RAW_BODY log above. An edit to an outbound
-      // (AI/dashboard/phone) message resent under the same mid would hit this
-      // branch and vanish silently otherwise. Logging to check against it.
-      console.log("DEDUPE_COLLISION:", { mid: instagramMsgId, text });
-      return; // ours — already recorded when sent
-    }
+    if (insertError?.code === "23505") return; // ours — already recorded when sent
 
     // Genuinely new: sent from outside Instasuite (the phone app). A human is
     // clearly already handling this guest, so stop the AI from also replying.
