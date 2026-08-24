@@ -97,6 +97,13 @@ export async function POST(request: NextRequest) {
     if (!igAccountId) continue;
 
     for (const messaging of entry.messaging ?? []) {
+      if (!messaging?.message?.text && !messaging?.message?.is_echo) {
+        // TEMPORARY — capturing real payload shapes for unsend/edit support
+        // investigation. Meta doesn't officially document either event for
+        // Instagram; this makes sure we'd actually see it if it exists instead
+        // of silently discarding it at the filter below. Remove once confirmed.
+        console.log("UNRECOGNIZED_WEBHOOK_SHAPE:", JSON.stringify(messaging));
+      }
       if (!messaging?.message?.text) continue;
       // Echoes fire for EVERY outbound message on the account — ours (AI/dashboard,
       // already stored when sent) and anything sent manually from the connected
