@@ -15,6 +15,8 @@ import {
   FileText,
   UserCheck,
   Clock,
+  Receipt,
+  X,
 } from "lucide-react";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
 
@@ -134,6 +136,58 @@ export default function AccountInbox({
   const [sending, setSending] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithLastMessage | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Log-order modal — for a reservation/order staff handled by typing their own
+  // reply instead of letting the AI produce it, so it still shows up on /orders.
+  const [logOrderTarget, setLogOrderTarget] = useState<ConversationWithLastMessage | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [orderKind, setOrderKind] = useState<"reservation" | "takeaway">("reservation");
+  const [orderCustomerName, setOrderCustomerName] = useState("");
+  const [orderOutlet, setOrderOutlet] = useState("");
+  const [orderGuestsOrItems, setOrderGuestsOrItems] = useState("");
+  const [orderContact, setOrderContact] = useState("");
+  const [orderScheduledAt, setOrderScheduledAt] = useState("");
+  const [orderAlreadyConfirmed, setOrderAlreadyConfirmed] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  function openLogOrder(convo: ConversationWithLastMessage) {
+    setLogOrderTarget(convo);
+    setOrderKind("reservation");
+    setOrderCustomerName(convo.name || convo.username || "");
+    setOrderOutlet("");
+    setOrderGuestsOrItems("");
+    setOrderContact("");
+    setOrderScheduledAt("");
+    setOrderAlreadyConfirmed(true);
+    setOrderError(null);
+  }
+
+  async function submitLogOrder() {
+    if (!logOrderTarget || savingOrder) return;
+    setSavingOrder(true);
+    setOrderError(null);
+    const res = await fetch(`/api/conversations/${logOrderTarget.id}/log-order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: orderKind,
+        customer_name: orderCustomerName,
+        outlet: orderOutlet,
+        guests_or_items: orderGuestsOrItems,
+        contact: orderContact,
+        scheduled_at: orderScheduledAt ? new Date(orderScheduledAt).toISOString() : undefined,
+        already_confirmed: orderAlreadyConfirmed,
+      }),
+    });
+    setSavingOrder(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setOrderError(d?.error || "Couldn't log that.");
+      return;
+    }
+    setLogOrderTarget(null);
+    onChanged();
+  }
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Split the list into Ongoing / Completed. A chat is Completed once its latest order's
@@ -394,6 +448,14 @@ export default function AccountInbox({
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <button
+                    onClick={() => openLogOrder(selected)}
+                    title="Log an order/reservation you handled manually in this chat"
+                    className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+                  >
+                    <Receipt size={12} />
+                    <span className="hidden lg:inline">Log order</span>
+                  </button>
+                  <button
                     onClick={toggleMode}
                     className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
                       selected.mode === "agent"
@@ -645,6 +707,132 @@ export default function AccountInbox({
               >
                 {deleting && <Loader2 size={12} className="animate-spin" />}
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {logOrderTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-sm"
+          onClick={() => !savingOrder && setLogOrderTarget(null)}
+        >
+          <div
+            className="w-full max-w-[420px] rounded-2xl border border-[var(--border-strong)] bg-[var(--modal-bg)] p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]">
+                  <Receipt size={15} className="text-[var(--accent)]" />
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-bold text-[var(--text-1)]">Log an order</h3>
+                  <p className="text-[11px] text-[var(--text-4)]">
+                    For a booking you handled by typing your own reply
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setLogOrderTarget(null)}
+                aria-label="Close"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--text-4)] transition-colors hover:bg-[var(--surface-1)]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="flex rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-0.5">
+                {(["reservation", "takeaway"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setOrderKind(k)}
+                    className={`flex-1 rounded-md px-2.5 py-1.5 text-[12px] font-bold capitalize transition-colors ${
+                      orderKind === k
+                        ? "bg-[var(--accent)] text-[var(--accent-fg)]"
+                        : "text-[var(--text-4)] hover:text-[var(--text-2)]"
+                    }`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                value={orderCustomerName}
+                onChange={(e) => setOrderCustomerName(e.target.value)}
+                placeholder="Guest name"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <input
+                value={orderOutlet}
+                onChange={(e) => setOrderOutlet(e.target.value)}
+                placeholder="Outlet"
+                className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={orderGuestsOrItems}
+                  onChange={(e) => setOrderGuestsOrItems(e.target.value)}
+                  placeholder={orderKind === "reservation" ? "Guests" : "Items"}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+                />
+                <input
+                  value={orderContact}
+                  onChange={(e) => setOrderContact(e.target.value)}
+                  placeholder="Contact (optional)"
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-[var(--text-4)]">
+                  {orderKind === "reservation" ? "Reservation time" : "Pickup time"}
+                </label>
+                <input
+                  type="datetime-local"
+                  value={orderScheduledAt}
+                  onChange={(e) => setOrderScheduledAt(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3.5 py-2.5 text-sm text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-[12px] text-[var(--text-2)]">
+                <input
+                  type="checkbox"
+                  checked={orderAlreadyConfirmed}
+                  onChange={(e) => setOrderAlreadyConfirmed(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  I already told the guest this is confirmed — don&apos;t send another
+                  confirmation message. (Leave unchecked to log it as pending, so it can be
+                  confirmed later from Orders as usual.)
+                </span>
+              </label>
+
+              {orderError && (
+                <p className="text-[11px] font-semibold text-[var(--danger)]">{orderError}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setLogOrderTarget(null)}
+                disabled={savingOrder}
+                className="rounded-lg px-3.5 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitLogOrder}
+                disabled={savingOrder}
+                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+              >
+                {savingOrder && <Loader2 size={13} className="animate-spin" />}
+                Log order
               </button>
             </div>
           </div>
