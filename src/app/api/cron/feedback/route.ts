@@ -92,6 +92,10 @@ export async function POST(request: NextRequest) {
           conversation_id: row.conversation_id,
           role: "assistant",
           content: message,
+          // Recorded so the webhook's later echo of this send is recognized as
+          // ours and deduped, instead of appearing twice and being mistaken for
+          // a manual phone reply (which would wrongly flip mode to human).
+          instagram_msg_id: sendRes?.message_id ?? null,
         });
         await supabaseAdmin
           .from("instagram_conversations")

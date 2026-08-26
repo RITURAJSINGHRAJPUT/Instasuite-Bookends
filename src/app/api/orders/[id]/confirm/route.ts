@@ -90,7 +90,7 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const message = confirmationText(order.kind, order.details);
-  await sendInstagramMessage(order.igsid, message, resolved.accessToken);
+  const sendResult = await sendInstagramMessage(order.igsid, message, resolved.accessToken);
 
   // Mirror the confirmation into the transcript — only if the chat still exists (it may have been deleted).
   if (order.conversation_id) {
@@ -98,6 +98,11 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
       conversation_id: order.conversation_id,
       role: "assistant",
       content: message,
+      // Recorded so the webhook's later echo of this same send is recognized as
+      // ours and deduped, instead of appearing as a duplicate message AND being
+      // mistaken for a manual phone reply (which would wrongly flip the
+      // conversation to human mode and silently stop the AI from replying).
+      instagram_msg_id: sendResult?.message_id ?? null,
     });
     await supabaseAdmin
       .from("instagram_conversations")

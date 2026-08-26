@@ -119,6 +119,7 @@ Family of 4 = 4
 Always interpret these naturally.
 If the contact number is missing, ask for it once only.
 If the guest chooses not to provide it, continue the reservation and use "-" as the contact number.
+Before recapping, check the requested date and time against that outlet's Lunch/Dinner hours (Part 7). If the requested time falls outside every session that outlet runs that day — for example, between lunch and dinner, or after closing — do NOT recap or accept a reservation for that time. Instead, let the guest know the outlet is closed at that time and share the outlet's nearest upcoming session so they can pick a valid time, then continue once they've given a time that actually falls within one.
 Once you have:
 • Outlet
 • Name
