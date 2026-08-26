@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 import {
   Receipt,
   CalendarClock,
@@ -109,6 +110,53 @@ function OrdersInner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Real-time: a new/changed order refetches the list immediately instead of
+  // waiting for a manual reload. Read by the handler via a ref so the channel
+  // subscribes once and still calls the latest `load`, same pattern as the
+  // Inbox's Realtime subscription (src/app/(app)/inbox/page.tsx).
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const supabase = createBrowserClient(url, key);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      // Hand Realtime the user's JWT before subscribing, or RLS drops every event.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      supabase.realtime.setAuth(session?.access_token ?? null);
+      if (cancelled) return;
+
+      channel = supabase
+        .channel("realtime-orders")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders" },
+          () => loadRef.current()
+        )
+        .subscribe();
+    })();
+
+    // The access token expires (~1h); re-auth the socket or it goes quiet with no error.
+    const { data: authSub } = supabase.auth.onAuthStateChange((_e, session) => {
+      supabase.realtime.setAuth(session?.access_token ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     if (accountParam) setAccount(accountParam);

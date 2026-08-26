@@ -186,52 +186,86 @@ export default function Sidebar() {
     setDark(document.documentElement.getAttribute("data-theme") === "dark");
   }, []);
 
-  // Sidebar badge: how many orders are still pending (unconfirmed) — a new
-  // reservation/takeaway bumps it without a manual refresh. Gated on the capability
-  // so roles without Orders never fetch it. Re-runs on navigation (so it drops
-  // right after you confirm one on the Orders page) and polls every 30s otherwise.
+  // Sidebar badges: how many orders are pending, and how many review items are
+  // open. Gated per-capability so a role without that section never fetches it.
+  // Updated in real time via Supabase Realtime (one shared channel, mirroring
+  // the Inbox's "one socket" pattern) rather than polling — a new order/review
+  // item bumps the badge, and the chime fires, as soon as the row changes,
+  // not up to 30s later.
   useEffect(() => {
-    if (!me?.capabilities?.includes("orders")) return;
+    const hasOrders = !!me?.capabilities?.includes("orders");
+    const hasReview = !!me?.capabilities?.includes("review");
+    if (!hasOrders && !hasReview) return;
+
     let cancelled = false;
-    const load = () =>
+
+    const loadOrders = () =>
       fetch("/api/orders?count=1")
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (!cancelled && d && typeof d.count === "number") {
-            if (prevOrdersCount.current !== null && d.count > prevOrdersCount.current) {
-              playOrderChime();
-            }
-            prevOrdersCount.current = d.count;
-            setOrdersCount(d.count);
+          if (cancelled || !d || typeof d.count !== "number") return;
+          if (prevOrdersCount.current !== null && d.count > prevOrdersCount.current) {
+            playOrderChime();
           }
+          prevOrdersCount.current = d.count;
+          setOrdersCount(d.count);
         })
         .catch(() => {});
-    load();
-    const id = setInterval(load, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [me?.capabilities, pathname]);
 
-  // Same pattern for the Review badge: count of pending (not-yet-reviewed) handoff items.
-  useEffect(() => {
-    if (!me?.capabilities?.includes("review")) return;
-    let cancelled = false;
-    const load = () =>
+    const loadReview = () =>
       fetch("/api/review?count=1")
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!cancelled && d && typeof d.count === "number") setReviewCount(d.count);
         })
         .catch(() => {});
-    load();
-    const id = setInterval(load, 30_000);
+
+    if (hasOrders) loadOrders();
+    if (hasReview) loadReview();
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const supabase = createBrowserClient(url, key);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      // Hand Realtime the user's JWT before subscribing, or RLS drops every event.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      supabase.realtime.setAuth(session?.access_token ?? null);
+      if (cancelled) return;
+
+      let ch = supabase.channel("realtime-sidebar-badges");
+      if (hasOrders) {
+        ch = ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders" },
+          () => loadOrders()
+        );
+      }
+      if (hasReview) {
+        ch = ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "review_items" },
+          () => loadReview()
+        );
+      }
+      channel = ch.subscribe();
+    })();
+
+    // The access token expires (~1h); re-auth the socket or it goes quiet with no error.
+    const { data: authSub } = supabase.auth.onAuthStateChange((_e, session) => {
+      supabase.realtime.setAuth(session?.access_token ?? null);
+    });
+
     return () => {
       cancelled = true;
-      clearInterval(id);
+      authSub.subscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [me?.capabilities, pathname]);
+  }, [me?.capabilities]);
 
   // Close the mobile drawer on navigation, or it covers the page you just opened.
   // The user menu goes with it — a popover left hanging over the new page is worse.
