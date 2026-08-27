@@ -21,9 +21,22 @@ export async function PATCH(
   const owned = await getOwnedConversation(id, ctx);
   if (!owned) return Response.json({ error: "Not found" }, { status: 404 });
 
+  // Switching back to AI closes out whatever human episode was open, so the stale
+  // reason doesn't linger. `dismiss_handoff_notice` lets staff clear the Inbox's
+  // "log this order" nudge without leaving human mode (e.g. it wasn't an order).
+  const updates: Record<string, unknown> = {};
+  if (body.mode) {
+    updates.mode = body.mode;
+    if (body.mode === "agent") updates.human_handoff_reason = null;
+  }
+  if (body.dismiss_handoff_notice) updates.human_handoff_reason = null;
+  if (!Object.keys(updates).length) {
+    return Response.json({ error: "Nothing to update" }, { status: 400 });
+  }
+
   const { data, error } = await supabaseAdmin
     .from("instagram_conversations")
-    .update({ mode: body.mode })
+    .update(updates)
     .eq("id", id)
     .in("instagram_account_id", ctx.accountIds)
     .select()

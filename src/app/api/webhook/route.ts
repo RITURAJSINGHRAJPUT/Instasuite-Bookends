@@ -329,11 +329,14 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // near the top of processMessage early-returns on mode === "human"), so staff pick it up. Two
     // reasons: (a) Claude couldn't answer (paused key, outage, or refusal) — the safe holding
     // message was already sent above and we never serve weak-model output; or (b) the AI flagged a
-    // REVIEW matter (collab/complaint/…) that a person must take over.
+    // REVIEW matter (collab/complaint/…) that a person must take over. Recorded as
+    // human_handoff_reason so the Inbox can nudge staff to use "Log order" for the "outage" case
+    // specifically — a manual reply typed from here never runs captureOrder, so a reservation/order
+    // a human finishes by hand after an outage would otherwise never reach the Orders page.
     if (ai.unavailable || detectedReview) {
       await supabaseAdmin
         .from("instagram_conversations")
-        .update({ mode: "human" })
+        .update({ mode: "human", human_handoff_reason: ai.unavailable ? "outage" : "review" })
         .eq("id", conversation.id);
     }
   } catch (error) {

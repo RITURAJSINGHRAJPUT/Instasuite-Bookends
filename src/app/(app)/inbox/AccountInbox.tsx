@@ -16,6 +16,7 @@ import {
   UserCheck,
   Clock,
   Receipt,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -292,6 +293,17 @@ export default function AccountInbox({
     onChanged();
   }
 
+  // Clears the "log this order" nudge below without leaving human mode — for when
+  // the handoff genuinely wasn't a reservation/order (e.g. just a question).
+  async function dismissHandoffNotice(convoId: string) {
+    const res = await fetch(`/api/conversations/${convoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismiss_handoff_notice: true }),
+    });
+    if (res.ok) onChanged();
+  }
+
   async function handleSend() {
     if (!input.trim() || !selectedId || sending) return;
     setSending(true);
@@ -448,14 +460,6 @@ export default function AccountInbox({
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <button
-                    onClick={() => openLogOrder(selected)}
-                    title="Log an order/reservation you handled manually in this chat"
-                    className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
-                  >
-                    <Receipt size={12} />
-                    <span className="hidden lg:inline">Log order</span>
-                  </button>
-                  <button
                     onClick={toggleMode}
                     className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
                       selected.mode === "agent"
@@ -478,6 +482,40 @@ export default function AccountInbox({
                   </button>
                 </div>
               </div>
+
+              {selected.mode === "human" &&
+                selected.human_handoff_reason === "outage" &&
+                !selected.order && (
+                  <div
+                    className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-[var(--warn)]/25 bg-[var(--warn-soft)] px-4 py-2.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-[var(--warn)]">
+                      <AlertTriangle size={14} className="flex-shrink-0" />
+                      <span className="truncate">
+                        The AI went down mid-chat and handed this to a human. If you confirmed a
+                        reservation or order here yourself, it won&apos;t show up on Orders unless
+                        you log it.
+                      </span>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <button
+                        onClick={() => openLogOrder(selected)}
+                        className="flex items-center gap-1.5 rounded-lg border border-[var(--warn)]/30 px-2.5 py-1 text-[11px] font-bold text-[var(--warn)] transition-colors hover:bg-[var(--warn)]/10"
+                      >
+                        <Receipt size={12} />
+                        Log order
+                      </button>
+                      <button
+                        onClick={() => dismissHandoffNotice(selected.id)}
+                        aria-label="Dismiss"
+                        title="Not an order — dismiss"
+                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-[var(--warn)] transition-colors hover:bg-[var(--warn)]/10"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
                 {messages.map((msg, i) => {

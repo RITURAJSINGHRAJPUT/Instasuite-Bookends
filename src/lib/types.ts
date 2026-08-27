@@ -11,6 +11,8 @@ export interface Conversation {
   is_user_follow_business: boolean | null;
   is_business_follow_user: boolean | null;
   mode: "agent" | "human";
+  /** Why mode last flipped to "human": "outage" (Claude failed) or "review" (flagged for a person). Null once dismissed or back in agent mode. */
+  human_handoff_reason: string | null;
   updated_at: string;
   created_at: string;
 }
