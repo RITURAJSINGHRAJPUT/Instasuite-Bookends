@@ -17,6 +17,7 @@ import {
   Clock,
   Receipt,
   AlertTriangle,
+  Zap,
   X,
 } from "lucide-react";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -39,6 +40,7 @@ export type ConnectedAccount = {
   name: string | null;
   profile_picture_url: string | null;
   status: string;
+  business_id: string | null;
   script_id: string | null;
   businesses: { name: string; default_script_id: string | null } | null;
 };
@@ -137,6 +139,33 @@ export default function AccountInbox({
   const [sending, setSending] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithLastMessage | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Quick replies popover — pre-written messages (managed on the /quick-replies
+  // page) for this account's business. Lazy-loaded on first open, then cached for
+  // the life of this panel; `null` means "not fetched yet" (distinct from "fetched,
+  // empty").
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; message: string }[] | null>(
+    null
+  );
+  const [loadingQuickReplies, setLoadingQuickReplies] = useState(false);
+
+  async function toggleQuickReplies() {
+    const opening = !showQuickReplies;
+    setShowQuickReplies(opening);
+    if (opening && quickReplies === null && account.business_id) {
+      setLoadingQuickReplies(true);
+      const res = await fetch(`/api/quick-replies?business_id=${account.business_id}`);
+      const data = await res.json().catch(() => []);
+      setLoadingQuickReplies(false);
+      setQuickReplies(Array.isArray(data) ? data : []);
+    }
+  }
+
+  function sendQuickReply(text: string) {
+    setShowQuickReplies(false);
+    sendMessage(text);
+  }
 
   // Log-order modal — for a reservation/order staff handled by typing their own
   // reply instead of letting the AI produce it, so it still shows up on /orders.
@@ -304,18 +333,24 @@ export default function AccountInbox({
     if (res.ok) onChanged();
   }
 
-  async function handleSend() {
-    if (!input.trim() || !selectedId || sending) return;
+  // Takes the text as a param (rather than always reading `input`) so a tapped
+  // quick reply can send immediately without ever touching the composer's input state.
+  async function sendMessage(text: string) {
+    if (!text.trim() || !selectedId || sending) return;
     setSending(true);
     await fetch(`/api/conversations/${selectedId}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input.trim() }),
+      body: JSON.stringify({ message: text.trim() }),
     });
     setInput("");
     setSending(false);
     fetchMessages(selectedId);
     onChanged();
+  }
+
+  function handleSend() {
+    return sendMessage(input);
   }
 
   async function handleDelete() {
@@ -563,10 +598,50 @@ export default function AccountInbox({
               </div>
 
               <div
-                className="flex-shrink-0 border-t border-[var(--border)] px-4 py-3"
+                className="relative flex-shrink-0 border-t border-[var(--border)] px-4 py-3"
                 style={{ background: "var(--panel-bg)" }}
               >
+                {showQuickReplies && (
+                  <>
+                    {/* Click-outside catcher — sits under the panel, above everything else. */}
+                    <div className="fixed inset-0 z-10" onClick={() => setShowQuickReplies(false)} />
+                    <div className="absolute bottom-full left-4 right-4 z-20 mb-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-1.5 shadow-lg">
+                      {loadingQuickReplies && (
+                        <p className="px-2.5 py-2 text-[11px] text-[var(--text-4)]">Loading…</p>
+                      )}
+                      {!loadingQuickReplies && quickReplies?.length === 0 && (
+                        <p className="px-2.5 py-2 text-[11px] text-[var(--text-4)]">
+                          No quick replies yet — add some from the Quick Replies page.
+                        </p>
+                      )}
+                      {!loadingQuickReplies &&
+                        quickReplies?.map((qr) => (
+                          <button
+                            key={qr.id}
+                            onClick={() => sendQuickReply(qr.message)}
+                            disabled={sending}
+                            className="block w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
+                          >
+                            <p className="truncate text-[12px] font-bold text-[var(--text-1)]">{qr.title}</p>
+                            <p className="truncate text-[11px] text-[var(--text-4)]">{qr.message}</p>
+                          </button>
+                        ))}
+                    </div>
+                  </>
+                )}
                 <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 transition-colors focus-within:border-[var(--accent)]">
+                  <button
+                    onClick={toggleQuickReplies}
+                    aria-label="Quick replies"
+                    title="Quick replies"
+                    className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      showQuickReplies
+                        ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                        : "text-[var(--text-4)] hover:bg-[var(--surface-2)]"
+                    }`}
+                  >
+                    <Zap size={15} />
+                  </button>
                   <input
                     type="text"
                     value={input}

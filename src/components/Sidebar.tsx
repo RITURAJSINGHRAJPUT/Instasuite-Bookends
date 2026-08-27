@@ -22,6 +22,7 @@ import {
   Receipt,
   Flag,
   CircleSlash,
+  MessageSquareText,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ROLE_OPTIONS, type Feature } from "@/lib/permissions";
@@ -80,6 +81,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/review", label: "Review", icon: Flag, feature: "review" },
   { href: "/unavailable", label: "Unavailable", icon: CircleSlash, feature: "unavailable" },
   { href: "/scripts", label: "AI Scripts", icon: Bot, feature: "scripts" },
+  { href: "/quick-replies", label: "Quick Replies", icon: MessageSquareText, feature: "quick_replies" },
 ];
 
 // The Settings section: the general Settings page is the section header, and these
