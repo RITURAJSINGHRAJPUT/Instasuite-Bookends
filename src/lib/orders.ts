@@ -26,10 +26,27 @@ export function cancellationText(kind: string): string {
     : "Your order has been cancelled. Let us know if you'd like to place a new one anytime!";
 }
 
-export async function cancelOrderAndNotify(order: OrderForCancel): Promise<CancelOrderResult> {
+export async function cancelOrderAndNotify(
+  order: OrderForCancel,
+  opts: { acknowledgeConfirmed?: boolean } = {}
+): Promise<CancelOrderResult> {
   // Idempotent fast-path — the real guard is the atomic claim below.
   if (order.status === "cancelled") {
     return { ok: true, id: order.id, status: "cancelled", already: true };
+  }
+
+  // Cancelling an ALREADY-CONFIRMED order sends the guest a flat contradiction: they
+  // were told "✅ confirmed" moments ago and now get "cancelled". That really happened
+  // in production (confirmed then cancelled 8s apart, guest never asked). Staff must
+  // explicitly acknowledge the guest was already told it's confirmed. The auto-cancel
+  // of a superseded order in confirm/route.ts passes the flag deliberately.
+  if (order.status === "confirmed" && !opts.acknowledgeConfirmed) {
+    return {
+      ok: false,
+      error:
+        "This order is already confirmed — the guest has been told it's going ahead. Confirm you want to cancel it anyway.",
+      httpStatus: 409,
+    };
   }
 
   if (!order.igsid) {

@@ -14,6 +14,7 @@ import {
   Heart,
   Loader2,
   Ban,
+  Pencil,
 } from "lucide-react";
 
 // Real reservations + takeaway orders (the `orders` ledger), captured from the AI's handoff
@@ -69,6 +70,18 @@ function bookedTime(iso: string): string {
 
 const bookedLabel = (o: Order) => (o.kind === "reservation" ? "Booked for" : "Pickup");
 
+// The outlets run on IST, so the edit form shows and reads back an IST wall-clock
+// regardless of the operator's own timezone. Mirrors istToUtcIso in order-detect.ts.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+function toIstInput(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 16);
+}
+function fromIstInput(v: string): string | null {
+  if (!v) return null;
+  return new Date(new Date(`${v}:00Z`).getTime() - IST_OFFSET_MS).toISOString();
+}
+
 const acctLabel = (o: Order) => (o.account_username ? `@${o.account_username}` : "Account");
 
 export default function OrdersPage() {
@@ -93,6 +106,74 @@ function OrdersInner() {
   const [canceling, setCanceling] = useState<string | null>(null);
   const [sendingFeedback, setSendingFeedback] = useState<string | null>(null);
   const [feedbackErr, setFeedbackErr] = useState<{ id: string; msg: string } | null>(null);
+
+  // Confirm and Cancel each send the guest a DM the moment they fire, and there's no
+  // taking one back — so both go through an explicit acknowledgement step. A guest
+  // once got "✅ confirmed" and "cancelled" 8 seconds apart from two quick clicks.
+  const [pendingAction, setPendingAction] = useState<"confirm" | "cancel" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Edit form — for a booking renegotiated on a phone call, so the stored row matches
+  // what the guest was actually told.
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDetails, setEditDetails] = useState("");
+  const [editWhen, setEditWhen] = useState("");
+  const [editNotify, setEditNotify] = useState(false);
+
+  function openOrder(o: Order, action: "confirm" | "cancel" | null = null) {
+    setSelected(o);
+    setPendingAction(action);
+    setActionError(null);
+    setEditing(false);
+  }
+
+  function startEdit(o: Order) {
+    setEditName(o.customer_name || "");
+    setEditDetails(o.details || "");
+    setEditWhen(toIstInput(o.scheduled_at));
+    setEditNotify(false);
+    setActionError(null);
+    setPendingAction(null);
+    setEditing(true);
+  }
+
+  async function saveEdit(id: string) {
+    setSavingEdit(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_name: editName.trim(),
+          details: editDetails.trim(),
+          scheduled_at: fromIstInput(editWhen),
+          notify: editNotify,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(d?.error || "Couldn't save those changes.");
+        return;
+      }
+      const patch = {
+        customer_name: d.customer_name ?? editName.trim(),
+        details: d.details ?? editDetails.trim(),
+        scheduled_at: d.scheduled_at ?? fromIstInput(editWhen),
+      };
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+      setSelected((s) => (s && s.id === id ? { ...s, ...patch } : s));
+      setEditing(false);
+      if (d.notifyError) setActionError(`Saved, but the guest wasn't messaged: ${d.notifyError}`);
+    } catch {
+      setActionError("Couldn't save those changes.");
+    } finally {
+      setSavingEdit(false);
+      load();
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -171,6 +252,8 @@ function OrdersInner() {
 
   async function confirm(id: string) {
     setConfirming(id);
+    setActionError(null);
+    setPendingAction(null);
     try {
       const res = await fetch(`/api/orders/${id}/confirm`, { method: "POST" });
       if (res.ok) {
@@ -200,10 +283,17 @@ function OrdersInner() {
     }
   }
 
-  async function cancelOrder(id: string) {
+  // `acknowledgeConfirmed` is set only after staff are shown that the guest has ALREADY
+  // been told this order is confirmed — the server rejects the cancel without it.
+  async function cancelOrder(id: string, acknowledgeConfirmed: boolean) {
     setCanceling(id);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/orders/${id}/cancel`, { method: "POST" });
+      const res = await fetch(`/api/orders/${id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acknowledge_confirmed: acknowledgeConfirmed }),
+      });
       if (res.ok) {
         // Reflect immediately; the DM has already gone out.
         setOrders((prev) =>
@@ -212,6 +302,10 @@ function OrdersInner() {
         setSelected((s) =>
           s && s.id === id ? { ...s, status: "cancelled", cancellationRequested: false } : s
         );
+        setPendingAction(null);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setActionError(d?.error || "Couldn't cancel that.");
       }
     } finally {
       setCanceling(null);
@@ -326,10 +420,10 @@ function OrdersInner() {
           title="Takeaway orders"
           rows={takeaways}
           empty="No takeaway orders in this range."
-          onOpen={setSelected}
-          onConfirm={confirm}
+          onOpen={(o) => openOrder(o)}
+          onConfirm={(o) => openOrder(o, "confirm")}
           confirming={confirming}
-          onCancel={cancelOrder}
+          onCancel={(o) => openOrder(o, "cancel")}
           canceling={canceling}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
@@ -340,10 +434,10 @@ function OrdersInner() {
           title="Reservations"
           rows={reservations}
           empty="No reservations in this range."
-          onOpen={setSelected}
-          onConfirm={confirm}
+          onOpen={(o) => openOrder(o)}
+          onConfirm={(o) => openOrder(o, "confirm")}
           confirming={confirming}
-          onCancel={cancelOrder}
+          onCancel={(o) => openOrder(o, "cancel")}
           canceling={canceling}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
@@ -401,44 +495,177 @@ function OrdersInner() {
               </p>
             )}
 
-            <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
-              {selected.kind === "takeaway" ? "Order" : "Reservation"}
-            </p>
-            <p className="mt-1 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
-              {selected.details || "No further detail captured."}
-            </p>
-
-            <div className="mt-4 space-y-2">
-              {selected.status === "confirmed" ? (
-                <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
-                  <Check size={14} /> Confirmed — the customer was messaged.
-                </span>
-              ) : selected.status === "cancelled" ? (
-                <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--danger)]">
-                  <Ban size={14} /> Cancelled — the customer was messaged.
-                </span>
-              ) : (
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                {selected.kind === "takeaway" ? "Order" : "Reservation"}
+              </p>
+              {selected.status !== "cancelled" && !editing && (
                 <button
-                  onClick={() => confirm(selected.id)}
-                  disabled={confirming === selected.id}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                  onClick={() => startEdit(selected)}
+                  className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
                 >
-                  {confirming === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  Confirm &amp; message customer
-                </button>
-              )}
-
-              {selected.status !== "cancelled" && (
-                <button
-                  onClick={() => cancelOrder(selected.id)}
-                  disabled={canceling === selected.id}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--danger)]/30 px-4 py-2.5 text-sm font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
-                >
-                  {canceling === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-                  Cancel &amp; message customer
+                  <Pencil size={11} /> Edit
                 </button>
               )}
             </div>
+
+            {editing ? (
+              <div className="mt-1 space-y-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3">
+                <p className="text-[11px] text-[var(--text-4)]">
+                  Use this when the booking changed on a call — so what&apos;s stored matches what
+                  the guest was told.
+                </p>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                    Name
+                  </p>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                    {bookedLabel(selected)} (IST)
+                  </p>
+                  <input
+                    type="datetime-local"
+                    value={editWhen}
+                    onChange={(e) => setEditWhen(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                    Details
+                  </p>
+                  <textarea
+                    value={editDetails}
+                    onChange={(e) => setEditDetails(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </div>
+                <label className="flex cursor-pointer items-start gap-2 text-[12px] text-[var(--text-2)]">
+                  <input
+                    type="checkbox"
+                    checked={editNotify}
+                    onChange={(e) => setEditNotify(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  Also message the guest about this change
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveEdit(selected.id)}
+                    disabled={savingEdit}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                  >
+                    {savingEdit && <Loader2 size={13} className="animate-spin" />}
+                    Save changes
+                  </button>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+                {selected.details || "No further detail captured."}
+              </p>
+            )}
+
+            {actionError && (
+              <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+                <AlertTriangle size={13} className="mt-px flex-shrink-0" />
+                {actionError}
+              </p>
+            )}
+
+            {!editing && (
+              <div className="mt-4 space-y-2">
+                {selected.status === "cancelled" ? (
+                  <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--danger)]">
+                    <Ban size={14} /> Cancelled — the customer was messaged.
+                  </span>
+                ) : pendingAction ? (
+                  // Both actions DM the guest the instant they fire and can't be taken back,
+                  // so each needs an explicit yes — especially cancelling something the guest
+                  // has already been told is going ahead.
+                  <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] p-3">
+                    <p className="text-[12px] font-bold text-[var(--text-1)]">
+                      {pendingAction === "confirm"
+                        ? "Send the customer a confirmation message?"
+                        : selected.status === "confirmed"
+                          ? "This order is already confirmed — the guest was told it's going ahead."
+                          : "Send the customer a cancellation message?"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--text-4)]">
+                      {pendingAction === "cancel" && selected.status === "confirmed"
+                        ? "Cancelling now sends them a contradicting message. Continue only if that's intended."
+                        : "This sends a DM straight away and can't be undone."}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() =>
+                          pendingAction === "confirm"
+                            ? confirm(selected.id)
+                            : cancelOrder(selected.id, selected.status === "confirmed")
+                        }
+                        disabled={confirming === selected.id || canceling === selected.id}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-bold transition-colors disabled:opacity-40 ${
+                          pendingAction === "confirm"
+                            ? "bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+                            : "bg-[var(--danger)] text-white hover:opacity-90"
+                        }`}
+                      >
+                        {confirming === selected.id || canceling === selected.id ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : pendingAction === "confirm" ? (
+                          <Check size={13} />
+                        ) : (
+                          <Ban size={13} />
+                        )}
+                        {pendingAction === "confirm" ? "Yes, confirm & message" : "Yes, cancel & message"}
+                      </button>
+                      <button
+                        onClick={() => setPendingAction(null)}
+                        className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {selected.status === "confirmed" ? (
+                      <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
+                        <Check size={14} /> Confirmed — the customer was messaged.
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setPendingAction("confirm")}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
+                      >
+                        <Check size={14} />
+                        Confirm &amp; message customer
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setPendingAction("cancel")}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--danger)]/30 px-4 py-2.5 text-sm font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
+                    >
+                      <Ban size={14} />
+                      Cancel &amp; message customer
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {selected.kind === "reservation" && (
               <div className="mt-3">
@@ -495,9 +722,11 @@ function Column({
   rows: Order[];
   empty: string;
   onOpen: (o: Order) => void;
-  onConfirm: (id: string) => void;
+  /** Opens the order with its Confirm step armed — the DM only goes out after staff acknowledge it. */
+  onConfirm: (o: Order) => void;
   confirming: string | null;
-  onCancel: (id: string) => void;
+  /** Same, for Cancel. */
+  onCancel: (o: Order) => void;
   canceling: string | null;
   onFeedback: (id: string) => void;
   sendingFeedback: string | null;
@@ -559,7 +788,7 @@ function Column({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onConfirm(o.id);
+                      onConfirm(o);
                     }}
                     disabled={confirming === o.id}
                     className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
@@ -573,7 +802,7 @@ function Column({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onCancel(o.id);
+                      onCancel(o);
                     }}
                     disabled={canceling === o.id}
                     className="flex items-center gap-1 rounded-lg border border-[var(--danger)]/30 px-3 py-1.5 text-[11px] font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"

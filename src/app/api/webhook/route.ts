@@ -228,19 +228,23 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     }
 
     // Fresh start after an order: once a reservation/takeaway is captured we stamp
-    // `context_reset_at` (below), and from then on the AI is fed ONLY the messages after that
-    // point — the finished order is hidden so the AI can't resume or re-confirm it. The one
-    // exception is when the guest clearly asks about a past order: then we lift the filter for
-    // this single turn so the AI has the full transcript to answer from.
+    // `context_reset_at` (below), and from then on the AI is fed mainly the messages from that
+    // point on — the finished order's lead-up is hidden so the AI can't resume or re-confirm it.
+    // The one exception is when the guest clearly asks about a past order: then we lift the
+    // filter for this single turn so the AI has the full transcript to answer from. See the
+    // `>=` and MIN_CONTEXT notes below — the boundary must never starve the model of context.
     const resetAt = (conversation as { context_reset_at?: string | null }).context_reset_at ?? null;
 
+    // Newest-first + reverse, so a long conversation feeds the AI its RECENT 20 turns.
+    // Ascending + limit(20) returned the OLDEST 20 instead — past 20 messages the AI was
+    // reasoning from the top of the thread and never saw what was just said.
     const { data: rawHistory } = await supabaseAdmin
       .from("instagram_messages")
       .select("role, content, created_at")
       .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(20);
-    const rows = rawHistory || [];
+    const rows = (rawHistory || []).slice().reverse();
 
     // Debounce may have batched several guest bubbles since the last assistant
     // turn — check intent across all of them, not just the very last one.
@@ -264,8 +268,21 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
         .eq("id", conversation.id);
     }
 
+    // `>=` keeps the recap/confirmation turn the boundary was stamped AT inside the window.
+    // With a strict `>` it was excluded, so the guest's next "Okay" reached the model as the
+    // only message in the conversation — and the script's own "if history is empty, this is a
+    // fresh conversation" rule then correctly produced a brand-new welcome. Keeping that turn
+    // visible is also what makes REPLY_GUARD's "you already finalized an order" rule
+    // enforceable: the model can now SEE the finalization it's being told about.
+    const afterReset =
+      resetAt && !wantsPast ? rows.filter((m) => m.created_at >= resetAt) : rows;
+
+    // Floor: never hand the model a context-less window. The reset exists to stop it RESUMING
+    // a finished order, not to erase the conversation — so if the boundary trimmed history down
+    // to almost nothing, fall back to the recent turns instead of leaving it with no grounding.
+    const MIN_CONTEXT = 6;
     const filtered =
-      resetAt && !wantsPast ? rows.filter((m) => m.created_at > resetAt) : rows;
+      afterReset.length < MIN_CONTEXT ? rows.slice(-MIN_CONTEXT) : afterReset;
 
     // This tenant's script — not a module-level constant.
     const ai = await getAIResponse(

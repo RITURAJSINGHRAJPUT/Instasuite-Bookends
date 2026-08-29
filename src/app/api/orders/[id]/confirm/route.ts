@@ -139,7 +139,10 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
         .maybeSingle<OrderForCancel>();
 
       if (otherOrder) {
-        const cancelResult = await cancelOrderAndNotify(otherOrder);
+        // Deliberate: the guest ASKED to cancel this one (there's an open cancellation
+        // request) and is being given a replacement in the same click, so the
+        // already-confirmed guard doesn't apply here.
+        const cancelResult = await cancelOrderAndNotify(otherOrder, { acknowledgeConfirmed: true });
         if (cancelResult.ok) supersededOrder = { id: cancelResult.id, status: cancelResult.status };
       }
     }

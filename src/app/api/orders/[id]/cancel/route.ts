@@ -8,11 +8,16 @@ import { cancelOrderAndNotify, type OrderForCancel } from "@/lib/orders";
 // logic (including the atomic-claim race guard) lives in src/lib/orders.ts, shared with
 // the confirm route's auto-cancel-superseded-order path.
 
-export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await getContext();
   if (!ctx) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (!can(ctx.user.role, "orders")) return Response.json({ error: "Not found" }, { status: 404 });
+
+  // Set by the UI only after staff acknowledge the guest was already told the order
+  // is confirmed — see the guard in cancelOrderAndNotify.
+  const body = await request.json().catch(() => null);
+  const acknowledgeConfirmed = body?.acknowledge_confirmed === true;
 
   const { data: order } = await supabaseAdmin
     .from("orders")
@@ -25,7 +30,7 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  const result = await cancelOrderAndNotify(order);
+  const result = await cancelOrderAndNotify(order, { acknowledgeConfirmed });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.httpStatus });
   return Response.json({ id: result.id, status: result.status, already: result.already });
 }
