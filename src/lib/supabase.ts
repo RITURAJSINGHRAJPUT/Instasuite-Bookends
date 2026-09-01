@@ -20,10 +20,11 @@ export function getSupabaseAdmin(): SupabaseClient {
   return _admin;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const supabaseAdmin = new Proxy({} as SupabaseClient, {
   get(_, prop) {
-    return (getSupabaseAdmin() as any)[prop];
+    // Indexing the client by an arbitrary prop key needs a widened view of it; Record<>
+    // keeps that local instead of casting the whole client to `any`.
+    return (getSupabaseAdmin() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

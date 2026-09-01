@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
 import { resolveAccountByIgId } from "@/lib/tenant";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 import { cancelOrderAndNotify, type OrderForCancel } from "@/lib/orders";
 
 // Confirm an order: mark it confirmed AND DM the customer a confirmation. Uses the order's OWN snapshotted
@@ -90,25 +90,17 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const message = confirmationText(order.kind, order.details);
-  const sendResult = await sendInstagramMessage(order.igsid, message, resolved.accessToken);
-
-  // Mirror the confirmation into the transcript — only if the chat still exists (it may have been deleted).
-  if (order.conversation_id) {
-    await supabaseAdmin.from("instagram_messages").insert({
-      conversation_id: order.conversation_id,
-      role: "assistant",
-      content: message,
-      // Recorded so the webhook's later echo of this same send is recognized as
-      // ours and deduped, instead of appearing as a duplicate message AND being
-      // mistaken for a manual phone reply (which would wrongly flip the
-      // conversation to human mode and silently stop the AI from replying).
-      instagram_msg_id: sendResult?.message_id ?? null,
-    });
-    await supabaseAdmin
-      .from("instagram_conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", order.conversation_id);
-  }
+  // Mirrors the confirmation into the transcript, but only for what Instagram
+  // actually accepted — and only if the chat still exists (it may have been deleted).
+  const sent = await sendAndStore({
+    conversationId: order.conversation_id,
+    igsid: order.igsid,
+    text: message,
+    accessToken: resolved.accessToken,
+  });
+  const notifyError = sent.ok
+    ? null
+    : sent.error?.message || "Instagram rejected the message.";
 
   // A guest who cancelled a reservation and then booked this instead never gets
   // a separate "please also click Cancel" step — confirming the replacement
@@ -148,5 +140,7 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  return Response.json({ ...claimed, supersededOrder });
+  // The order IS confirmed regardless; surface the notification failure so staff know
+  // the guest was never actually told.
+  return Response.json({ ...claimed, supersededOrder, notified: sent.ok, notifyError });
 }

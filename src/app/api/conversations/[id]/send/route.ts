@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 import { getContext, getOwnedConversation } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
 import { resolveAccountByIgId } from "@/lib/tenant";
@@ -34,27 +34,21 @@ export async function POST(
     return Response.json({ error: "Instagram account unavailable" }, { status: 502 });
   }
 
-  const sendResult = await sendInstagramMessage(conversation.igsid, message.trim(), resolved.accessToken);
+  const sent = await sendAndStore({
+    conversationId: id,
+    igsid: conversation.igsid,
+    text: message.trim(),
+    accessToken: resolved.accessToken,
+  });
 
-  const { data, error } = await supabaseAdmin
-    .from("instagram_messages")
-    .insert({
-      conversation_id: id,
-      role: "assistant",
-      content: message.trim(),
-      // Recorded so the webhook's later echo of this same send is recognized as
-      // ours and deduped instead of appearing as a second message.
-      instagram_msg_id: sendResult?.message_id ?? null,
-    })
-    .select()
-    .single();
+  // Report the failure instead of storing the message: a row here would show staff
+  // their reply in the thread as though the guest had received it.
+  if (!sent.ok) {
+    return Response.json(
+      { error: sent.error?.message || "Instagram rejected the message." },
+      { status: 502 }
+    );
+  }
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-
-  await supabaseAdmin
-    .from("instagram_conversations")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  return Response.json(data);
+  return Response.json({ ok: true, parts: sent.sentParts });
 }

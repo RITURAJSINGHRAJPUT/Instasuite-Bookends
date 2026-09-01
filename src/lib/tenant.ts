@@ -85,6 +85,20 @@ export async function resolveAccountByIgId(
     return null;
   }
 
+  // A token that won't decrypt (wrong/rotated TOKEN_ENCRYPTION_KEY, a legacy plaintext row,
+  // a truncated payload) must resolve to "no account", NOT an exception. Every caller already
+  // handles null correctly — the webhook ignores the event, the send route returns its 502 —
+  // whereas a throw escaped as a generic "Webhook processing error" or an unhandled 500.
+  let accessToken: string;
+  try {
+    accessToken = decryptSecret(data.access_token);
+  } catch (err) {
+    console.error(
+      `Webhook for ${igAccountId}: access token failed to decrypt (${(err as Error).message}) — ignoring. Reconnect this account.`
+    );
+    return null;
+  }
+
   // Append the business's currently-86'd items so the agent stops offering them.
   // getUnavailableBlock returns "" on empty or any error, so this never breaks a reply
   // and appends AFTER the menu (the block states it overrides the menu above it).
@@ -97,7 +111,7 @@ export async function resolveAccountByIgId(
     clientId: business.client_id,
     igAccountId: data.ig_account_id,
     username: data.username,
-    accessToken: decryptSecret(data.access_token),
+    accessToken,
     systemPrompt: unavailable ? `${script.content}\n\n${unavailable}` : script.content,
   };
 }

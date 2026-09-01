@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
 import { resolveAccountByIgId } from "@/lib/tenant";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 
 // Edit a captured order's details. Exists because a booking often changes on a phone
 // call ("as discussed over the call...") — before this, staff could only Confirm the
@@ -98,22 +98,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const message = updateText(updated.kind, updated.details);
-  const sendResult = await sendInstagramMessage(order.igsid, message, resolved.accessToken);
+  const sent = await sendAndStore({
+    conversationId: order.conversation_id,
+    igsid: order.igsid,
+    text: message,
+    accessToken: resolved.accessToken,
+  });
 
-  if (order.conversation_id) {
-    await supabaseAdmin.from("instagram_messages").insert({
-      conversation_id: order.conversation_id,
-      role: "assistant",
-      content: message,
-      // Recorded so the webhook's later echo of this send is recognized as ours and
-      // deduped, instead of appearing twice AND being mistaken for a manual phone
-      // reply (which would wrongly flip the conversation to human mode).
-      instagram_msg_id: sendResult?.message_id ?? null,
+  // The order edit itself stands either way — only the guest notification failed.
+  if (!sent.ok) {
+    return Response.json({
+      ...updated,
+      notified: false,
+      notifyError: sent.error?.message || "Instagram rejected the message.",
     });
-    await supabaseAdmin
-      .from("instagram_conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", order.conversation_id);
   }
 
   return Response.json({ ...updated, notified: true });

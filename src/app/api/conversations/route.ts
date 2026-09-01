@@ -69,22 +69,28 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const withLastMessage = await Promise.all(
-    (conversations || []).map(async (convo) => {
-      const { data: messages } = await supabaseAdmin
-        .from("instagram_messages")
-        .select("content, role, created_at")
-        .eq("conversation_id", convo.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
+  // Last message per conversation, in ONE query — same shape as the latestOrder map above.
+  // This used to run a query per conversation inside Promise.all: an Inbox with 23 chats fired
+  // 24 round trips, and it re-ran on every Realtime event. Newest-first, so the first row seen
+  // for a conversation is its latest.
+  const lastMessage = new Map<string, string>();
+  if (convoIds.length) {
+    const { data: messages } = await supabaseAdmin
+      .from("instagram_messages")
+      .select("conversation_id, content, created_at")
+      .in("conversation_id", convoIds)
+      .order("created_at", { ascending: false });
+    for (const m of messages ?? []) {
+      const id = m.conversation_id as string;
+      if (!lastMessage.has(id)) lastMessage.set(id, m.content as string);
+    }
+  }
 
-      return {
-        ...convo,
-        last_message: messages?.[0]?.content || null,
-        order: latestOrder.get(convo.id) ?? null,
-      };
-    })
-  );
+  const withLastMessage = (conversations || []).map((convo) => ({
+    ...convo,
+    last_message: lastMessage.get(convo.id) ?? null,
+    order: latestOrder.get(convo.id) ?? null,
+  }));
 
   return Response.json(withLastMessage);
 }

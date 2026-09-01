@@ -137,6 +137,9 @@ export default function AccountInbox({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Set when Instagram refused the reply (too long, 24h window closed, dead token).
+  // The guest got nothing, so this has to be visible rather than swallowed.
+  const [sendError, setSendError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithLastMessage | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -338,13 +341,23 @@ export default function AccountInbox({
   async function sendMessage(text: string) {
     if (!text.trim() || !selectedId || sending) return;
     setSending(true);
-    await fetch(`/api/conversations/${selectedId}/send`, {
+    setSendError(null);
+    const res = await fetch(`/api/conversations/${selectedId}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text.trim() }),
     });
-    setInput("");
     setSending(false);
+
+    // Nothing was delivered and nothing was stored. Keep the text in the composer so
+    // it can be shortened and retried instead of vanishing as if it had been sent.
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setSendError(body?.error || "Instagram wouldn't accept that message.");
+      return;
+    }
+
+    setInput("");
     fetchMessages(selectedId);
     onChanged();
   }
@@ -519,6 +532,26 @@ export default function AccountInbox({
               </div>
 
               {selected.mode === "human" &&
+                selected.human_handoff_reason === "undelivered" && (
+                  <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-[var(--danger)]/25 bg-[var(--danger-soft)] px-4 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-[var(--danger)]">
+                      <AlertTriangle size={14} className="flex-shrink-0" />
+                      <span className="truncate">
+                        Instagram rejected the AI&apos;s last reply, so the guest never received
+                        it. Reply here to pick this up.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => dismissHandoffNotice(selected.id)}
+                      aria-label="Dismiss"
+                      className="flex-shrink-0 opacity-60 transition-opacity hover:opacity-100"
+                    >
+                      <X size={14} className="text-[var(--danger)]" />
+                    </button>
+                  </div>
+                )}
+
+              {selected.mode === "human" &&
                 selected.human_handoff_reason === "outage" &&
                 !selected.order && (
                   <div
@@ -628,6 +661,19 @@ export default function AccountInbox({
                         ))}
                     </div>
                   </>
+                )}
+                {sendError && (
+                  <div className="mb-1.5 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
+                    <AlertTriangle size={13} className="mt-px flex-shrink-0" />
+                    <span className="min-w-0 flex-1">Not delivered — {sendError}</span>
+                    <button
+                      onClick={() => setSendError(null)}
+                      aria-label="Dismiss"
+                      className="flex-shrink-0 opacity-60 transition-opacity hover:opacity-100"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
                 )}
                 <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 transition-colors focus-within:border-[var(--accent)]">
                   <button

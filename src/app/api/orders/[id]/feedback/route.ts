@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
 import { resolveAccountByIgId } from "@/lib/tenant";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 import { feedbackMessage } from "@/lib/feedback";
 
 // Manual "send feedback now" — the operator's fallback when the time-based cron (/api/cron/feedback)
@@ -64,33 +64,21 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
 
   const handle = one(order.businesses)?.public_handle ?? null;
   const message = feedbackMessage(handle);
-  const sendRes = await sendInstagramMessage(order.igsid, message, resolved.accessToken);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rejected: any = sendRes?.error;
+  // Mirrors into the transcript only what was delivered, and only if the chat still
+  // exists (it may have been deleted).
+  const sent = await sendAndStore({
+    conversationId: order.conversation_id,
+    igsid: order.igsid,
+    text: message,
+    accessToken: resolved.accessToken,
+  });
 
-  if (rejected) {
+  if (!sent.ok) {
     // Do NOT stamp — leave it retryable (e.g. guest's 24h window is closed right now).
     return Response.json(
-      { sent: false, detail: rejected.message || rejected.code || "policy" },
+      { sent: false, detail: sent.error?.message || sent.error?.code || "policy" },
       { status: 502 }
     );
-  }
-
-  // Mirror into the transcript only if the chat still exists (it may have been deleted).
-  if (order.conversation_id) {
-    await supabaseAdmin.from("instagram_messages").insert({
-      conversation_id: order.conversation_id,
-      role: "assistant",
-      content: message,
-      // Recorded so the webhook's later echo of this send is recognized as ours
-      // and deduped, instead of appearing twice and being mistaken for a manual
-      // phone reply (which would wrongly flip the conversation to human mode).
-      instagram_msg_id: sendRes?.message_id ?? null,
-    });
-    await supabaseAdmin
-      .from("instagram_conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", order.conversation_id);
   }
 
   const sentAt = new Date().toISOString();

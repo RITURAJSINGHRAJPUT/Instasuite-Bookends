@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveAccountByIgId } from "@/lib/tenant";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 
 // Shared by /api/orders/[id]/cancel (a direct staff click) and
 // /api/orders/[id]/confirm (auto-cancelling a superseded order when its
@@ -81,24 +81,16 @@ export async function cancelOrderAndNotify(
   }
 
   const message = cancellationText(order.kind);
-  const sendResult = await sendInstagramMessage(order.igsid, message, resolved.accessToken);
+  // Stores only what Instagram accepted; the cancellation itself is already claimed
+  // above and stands whether or not the guest could be reached.
+  await sendAndStore({
+    conversationId: order.conversation_id,
+    igsid: order.igsid,
+    text: message,
+    accessToken: resolved.accessToken,
+  });
 
   if (order.conversation_id) {
-    await supabaseAdmin.from("instagram_messages").insert({
-      conversation_id: order.conversation_id,
-      role: "assistant",
-      content: message,
-      // Recorded so the webhook's later echo of this same send is recognized as
-      // ours and deduped, instead of appearing as a duplicate message AND being
-      // mistaken for a manual phone reply (which would wrongly flip the
-      // conversation to human mode and silently stop the AI from replying).
-      instagram_msg_id: sendResult?.message_id ?? null,
-    });
-    await supabaseAdmin
-      .from("instagram_conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", order.conversation_id);
-
     // Any pending cancellation-request review item for this conversation is now
     // actioned — mark it done so it stops showing as open in /review too.
     await supabaseAdmin

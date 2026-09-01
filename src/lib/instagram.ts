@@ -234,12 +234,86 @@ export async function refreshInstagramToken(
   return { access_token: data.access_token, expires_in: data.expires_in };
 }
 
-// The token decides which account the reply is sent FROM — /me is resolved from it.
-export async function sendInstagramMessage(
+// ---------------------------------------------------------------------------
+// Sending
+//
+// Instagram caps a single message's text at 1000 characters and rejects anything
+// longer outright. This used to `return res.json()` without checking it, so a
+// rejection reached the caller looking like a successful send and the message was
+// written into the transcript as delivered. That is how a 1330-character cake menu
+// came to sit in the Inbox marked sent while the guest received silence.
+//
+// Both halves are fixed here: long text is split into sendable parts, and a Graph
+// error is reported instead of swallowed.
+// ---------------------------------------------------------------------------
+
+export const IG_TEXT_LIMIT = 1000;
+
+// Headroom under the hard cap — Meta counts the text after its own normalisation,
+// so aiming exactly at 1000 invites an off-by-a-few rejection.
+const SAFE_CHUNK = 950;
+
+export type SentPart = { text: string; messageId: string | null };
+
+export type SendResult = {
+  ok: boolean;
+  /** Parts Meta accepted, in send order. Empty when the very first part failed. */
+  parts: SentPart[];
+  error?: { message: string; code?: number };
+};
+
+/** Index just past the last sentence-ending punctuation followed by whitespace, or -1. */
+function lastSentenceEnd(s: string): number {
+  const m = s.match(/^[\s\S]*[.!?…](?=\s)/);
+  return m ? m[0].length : -1;
+}
+
+/**
+ * Split text into Instagram-sendable parts at the most natural break available:
+ * blank line, then single newline, then sentence end, then a space. A part is never
+ * cut mid-word. Parts are trimmed, so the seams lose their whitespace — no visible
+ * text is ever dropped.
+ */
+export function splitForInstagram(text: string, limit: number = SAFE_CHUNK): string[] {
+  const source = text.trim();
+  if (!source) return [];
+  if (source.length <= limit) return [source];
+
+  // Prefer a break that at least half-fills the part. Without this an early blank
+  // line (say at character 12) would win over a newline at 900 and shatter the
+  // message into many tiny bubbles.
+  const minFill = Math.floor(limit / 2);
+  const parts: string[] = [];
+  let rest = source;
+
+  while (rest.length > limit) {
+    // One char past the limit, so a break sitting exactly on the boundary counts.
+    const window = rest.slice(0, limit + 1);
+    const candidates = [
+      window.lastIndexOf("\n\n"),
+      window.lastIndexOf("\n"),
+      lastSentenceEnd(window),
+      window.lastIndexOf(" "),
+    ];
+
+    let cut = candidates.find((i) => i >= minFill) ?? -1;
+    // Nothing well-placed: take any break at all, and only hard-cut when the window
+    // holds no whitespace whatsoever (a long unbroken URL), which would otherwise loop.
+    if (cut < 0) cut = candidates.find((i) => i > 0) ?? limit;
+
+    parts.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+
+  if (rest) parts.push(rest);
+  return parts.filter((p) => p.length > 0);
+}
+
+async function sendOnePart(
   recipientIgsid: string,
   text: string,
   accessToken: string
-) {
+): Promise<{ messageId: string | null; error?: { message: string; code?: number } }> {
   const url = new URL("https://graph.instagram.com/v24.0/me/messages");
   url.searchParams.set("access_token", accessToken);
 
@@ -251,5 +325,55 @@ export async function sendInstagramMessage(
       message: { text },
     }),
   });
-  return res.json();
+  const data = await res.json().catch(() => null);
+
+  // fetchWithRetry resolves for ANY status, so a Graph error surfaces only here.
+  if (!res.ok || data?.error) {
+    return {
+      messageId: null,
+      error: {
+        message: data?.error?.message || `Instagram API returned ${res.status}`,
+        code: data?.error?.code,
+      },
+    };
+  }
+  return { messageId: data?.message_id ?? null };
+}
+
+/**
+ * Send a message to a guest, splitting it when it exceeds Instagram's limit.
+ * The token decides which account the reply is sent FROM — /me is resolved from it.
+ *
+ * Callers MUST store one message row per returned part, each with its own messageId:
+ * Instagram echoes every part back separately and processEcho() dedupes those echoes
+ * on (conversation_id, instagram_msg_id). A delivered part with no stored row looks
+ * like a reply typed from someone's phone, which wrongly flips the conversation to
+ * human mode and silently stops auto-replies. Use sendAndStore() in lib/outbound.ts
+ * rather than reimplementing that.
+ */
+export async function sendInstagramMessage(
+  recipientIgsid: string,
+  text: string,
+  accessToken: string
+): Promise<SendResult> {
+  const chunks = splitForInstagram(text);
+  if (!chunks.length) {
+    return { ok: false, parts: [], error: { message: "Refusing to send an empty message." } };
+  }
+
+  const parts: SentPart[] = [];
+  for (const chunk of chunks) {
+    const { messageId, error } = await sendOnePart(recipientIgsid, chunk, accessToken);
+    if (error) {
+      // Stop at the first failure — the tail of a message whose head never arrived
+      // reads as gibberish to the guest.
+      console.error(
+        `Instagram send failed after ${parts.length}/${chunks.length} parts: ${error.message}`
+      );
+      return { ok: false, parts, error };
+    }
+    parts.push({ text: chunk, messageId });
+  }
+
+  return { ok: true, parts };
 }

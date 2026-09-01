@@ -101,6 +101,15 @@ function OrdersInner() {
   const [failed, setFailed] = useState(false);
   const [account, setAccount] = useState<string>("all");
   const [range, setRange] = useState<Range>("all");
+  // The clock as state, not a Date.now() call during render — reading it while rendering is
+  // impure and made the `scoped` memo below recompute on every render. Same pattern the Inbox
+  // uses for its Ongoing/Completed split; the slow tick keeps a long-open page's date filter
+  // from going stale without causing meaningful re-render churn.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const [selected, setSelected] = useState<Order | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [canceling, setCanceling] = useState<string | null>(null);
@@ -343,14 +352,12 @@ function OrdersInner() {
     return [...seen.entries()].map(([id, label]) => ({ id, label }));
   }, [orders]);
 
-  const cutoff = range === "all" ? 0 : Date.now() - RANGE_DAYS[range] * 86_400_000;
-  const scoped = useMemo(
-    () =>
-      orders
-        .filter((o) => account === "all" || o.account_id === account)
-        .filter((o) => range === "all" || new Date(o.created_at).getTime() >= cutoff),
-    [orders, account, range, cutoff]
-  );
+  const scoped = useMemo(() => {
+    const cutoff = range === "all" ? 0 : now - RANGE_DAYS[range] * 86_400_000;
+    return orders
+      .filter((o) => account === "all" || o.account_id === account)
+      .filter((o) => range === "all" || new Date(o.created_at).getTime() >= cutoff);
+  }, [orders, account, range, now]);
   const takeaways = scoped.filter((o) => o.kind === "takeaway");
   const reservations = scoped.filter((o) => o.kind === "reservation");
 

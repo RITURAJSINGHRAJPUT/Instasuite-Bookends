@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { NextRequest } from "next/server";
 import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { sendInstagramMessage, fetchInstagramProfile } from "@/lib/instagram";
+import { fetchInstagramProfile } from "@/lib/instagram";
+import { sendAndStore } from "@/lib/outbound";
 import { getAIResponse } from "@/lib/ai";
 import { resolveAccountByIgId, type ResolvedAccount } from "@/lib/tenant";
 import { checkMessageQuota } from "@/lib/usage";
@@ -186,14 +187,15 @@ async function sendCannedReply(
   igsid: string,
   text: string
 ) {
-  const sendResult = await sendInstagramMessage(igsid, text, account.accessToken);
-  await supabaseAdmin.from("instagram_messages").insert({
-    conversation_id: conversationId,
-    role: "assistant",
-    content: text,
-    instagram_msg_id: sendResult?.message_id ?? null,
+  const sent = await sendAndStore({
+    conversationId,
+    igsid,
+    text,
+    accessToken: account.accessToken,
   });
-  await touch(conversationId);
+  if (!sent.ok) {
+    console.error(`Welcome reply not delivered to ${igsid}: ${sent.error?.message}`);
+  }
 }
 
 // The AI-calling path, run after the debounce window settles. Re-resolves the
@@ -280,9 +282,20 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // Floor: never hand the model a context-less window. The reset exists to stop it RESUMING
     // a finished order, not to erase the conversation — so if the boundary trimmed history down
     // to almost nothing, fall back to the recent turns instead of leaving it with no grounding.
-    const MIN_CONTEXT = 6;
+    // 6 proved too small in practice: a guest's name and number given 7 turns back fell outside
+    // the window and the AI asked for them again.
+    const MIN_CONTEXT = 12;
     const filtered =
       afterReset.length < MIN_CONTEXT ? rows.slice(-MIN_CONTEXT) : afterReset;
+
+    // What we have ALREADY captured from this guest, injected as a system instruction rather
+    // than left to survive the history window. Two reasons it belongs here and not in the
+    // transcript: stripHandoff() deletes the handoff line that carried the name and contact, so
+    // the transcript may no longer hold them anywhere; and a system line cannot be echoed back
+    // to the guest as a chat turn the way a fake assistant message could. Carrying `status` also
+    // stops the AI following a staff "your order is confirmed" DM with "the team will confirm
+    // shortly" — it can finally see that the order is already done.
+    const captured = await capturedOrderNote(conversation.id);
 
     // This tenant's script — not a module-level constant.
     const ai = await getAIResponse(
@@ -297,7 +310,7 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
           }))
           .filter((m) => m.content.length > 0)
       ),
-      { systemPrompt: account.systemPrompt }
+      { systemPrompt: captured ? `${account.systemPrompt}\n\n${captured}` : account.systemPrompt }
     );
 
     // If the AI appended a reservation/takeaway handoff line — or a REVIEW line for a matter that
@@ -312,22 +325,32 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
       stripped || "Thanks! I've noted that — our team will confirm and follow up shortly. 🙌";
 
     // Reply FROM this tenant's account: the token is the sender identity.
-    const sendResult = await sendInstagramMessage(igsid, customerText, account.accessToken);
+    // Stores one row per delivered part (a long reply is split), each with its own
+    // mid so the later echo of it is deduped by processEcho rather than mistaken for
+    // a manual phone reply. Stores nothing at all if Instagram rejected the send.
+    const sent = await sendAndStore({
+      conversationId: conversation.id,
+      igsid,
+      text: customerText,
+      accessToken: account.accessToken,
+    });
 
-    const { data: assistantMsg } = await supabaseAdmin
-      .from("instagram_messages")
-      .insert({
-        conversation_id: conversation.id,
-        role: "assistant",
-        content: customerText,
-        // Recorded so the later echo of this same send (see processEcho below) is
-        // recognized as ours and deduped instead of appearing as a second message.
-        instagram_msg_id: sendResult?.message_id ?? null,
-      })
-      .select("created_at")
-      .single<{ created_at: string }>();
+    // The guest received nothing. Capturing an order or stamping a fresh-start
+    // boundary off a reply they never saw would compound the failure, so bail and
+    // hand the thread to a human — that puts the failure in front of staff in the
+    // Inbox instead of leaving it silent, which is how an undelivered cake menu
+    // sat there looking sent.
+    if (!sent.ok) {
+      console.error(
+        `Reply not delivered to ${igsid} on @${account.username}: ${sent.error?.message}`
+      );
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ mode: "human", human_handoff_reason: "undelivered" })
+        .eq("id", conversation.id);
+      return;
+    }
 
-    await touch(conversation.id);
     await recordUsage(account, ai);
 
     if (detected) {
@@ -337,7 +360,7 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
       // keeps the cut exact regardless of app-vs-DB clock skew. Covers reservations AND takeaways.
       await supabaseAdmin
         .from("instagram_conversations")
-        .update({ context_reset_at: assistantMsg?.created_at ?? new Date().toISOString() })
+        .update({ context_reset_at: sent.lastCreatedAt ?? new Date().toISOString() })
         .eq("id", conversation.id);
     }
     if (detectedReview) await captureReview(account, conversation, detectedReview);
@@ -406,6 +429,45 @@ async function processEcho(igAccountId: string, messaging: Messaging) {
   }
 }
 
+/**
+ * A system-prompt note describing what has already been captured from this guest, so the AI
+ * never re-asks for a name, number or pickup time it has on file. Returns "" when there is no
+ * order yet, or on any error — this only ever ADDS grounding, so a failure here must not break
+ * the reply. See the call site in generateAndSendReply for why this is a system line rather
+ * than part of the message history.
+ */
+async function capturedOrderNote(conversationId: string): Promise<string> {
+  try {
+    const { data: order } = await supabaseAdmin
+      .from("orders")
+      .select("kind, customer_name, details, status")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ kind: string; customer_name: string | null; details: string | null; status: string }>();
+    if (!order) return "";
+
+    const state =
+      order.status === "confirmed"
+        ? "Our team has ALREADY CONFIRMED this with the guest — refer to it as confirmed and never say the team will confirm it."
+        : order.status === "cancelled"
+          ? "This was CANCELLED. Do not treat it as active."
+          : "Our team has not confirmed this yet.";
+
+    return [
+      "ALREADY CAPTURED IN THIS CONVERSATION — never ask the guest for any of these details again; you already have them:",
+      `· Type: ${order.kind}`,
+      order.customer_name ? `· Name: ${order.customer_name}` : null,
+      order.details ? `· ${order.details}` : null,
+      `· ${state}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
+
 // Persist a captured reservation/takeaway as a pending order row. Guarded so it can never
 // break the reply (already sent above), and swallows the 23505 dedupe collision the same way
 // the message insert does. Staff confirm it later from the Orders page.
@@ -417,6 +479,39 @@ async function captureOrder(
   try {
     const customer =
       detected.customer || conversation.name || conversation.username || "Guest";
+
+    // One live order per conversation per kind. The AI often re-emits the SAME order with
+    // slightly different wording ("half and half (X and Y)" then "HnH X + Y"); dedupe_key is a
+    // hash of the exact line, so each rewording used to slip through and create another row —
+    // one real order became three, each with its own Confirm button and its own DM to the guest.
+    // The later emission is normally the more complete one (it has picked up the name/contact),
+    // so refresh the open row instead of inserting beside it. The `status` guard makes the update
+    // lose safely to a staff confirm that landed a moment earlier, rather than silently rewriting
+    // an order the guest has already been told is going ahead.
+    const { data: open } = await supabaseAdmin
+      .from("orders")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("kind", detected.kind)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (open) {
+      await supabaseAdmin
+        .from("orders")
+        .update({
+          customer_name: customer,
+          details: detected.summary,
+          scheduled_at: detected.scheduledAt,
+          dedupe_key: dedupeKey(detected.kind, conversation.id, detected.line),
+        })
+        .eq("id", open.id)
+        .eq("status", "pending");
+      return;
+    }
+
     const { error } = await supabaseAdmin.from("orders").insert({
       business_id: account.businessId,
       conversation_id: conversation.id,
