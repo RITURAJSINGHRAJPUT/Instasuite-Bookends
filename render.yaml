@@ -14,7 +14,7 @@ services:
     plan: starter # NOT free: free instances sleep after 15m idle and drop webhooks
     buildCommand: npm ci && npm run build
     startCommand: npm start
-    healthCheckPath: /login # public, cheap, 200 when the app is up
+    healthCheckPath: /api/health # uncacheable liveness ping; /login is prerendered and CDN-cached
     autoDeploy: true
     # Single instance on purpose: MAX_CONCURRENT_REPLIES bounds ONE process. Scaling
     # to several instances needs a shared queue (the in-process gate can't coordinate).
@@ -63,6 +63,31 @@ services:
       -H "Authorization: Bearer $CRON_SECRET"
     envVars:
       - key: APP_URL # https://<your-service>.onrender.com (the web service's URL)
+        sync: false
+      - key: CRON_SECRET # MUST match the web service's CRON_SECRET
+        sync: false
+
+  # -------- the post-dining feedback cron --------
+  # /api/cron/feedback existed in the code but was scheduled NOWHERE — not here and
+  # not in vercel.json — so the thank-you DM never actually went out to anyone.
+  #
+  # Every 10 minutes, per the route's own documented cadence. The window matters:
+  # the DM is due 2h after the reservation time, and Instagram refuses messages
+  # outside the guest's 24h window, so a coarse schedule (hourly, daily) would push
+  # sends past the point where Meta still accepts them. The route is idempotent —
+  # it stamps feedback_sent_at and skips anything already handled — so overlapping
+  # or repeated runs cannot double-send.
+  - type: cron
+    name: instasuite-feedback
+    runtime: node
+    plan: starter
+    schedule: "*/10 * * * *"
+    buildCommand: ""
+    startCommand: >
+      curl -fsS -X POST "$APP_URL/api/cron/feedback"
+      -H "Authorization: Bearer $CRON_SECRET"
+    envVars:
+      - key: APP_URL
         sync: false
       - key: CRON_SECRET # MUST match the web service's CRON_SECRET
         sync: false

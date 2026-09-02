@@ -10,6 +10,7 @@ import { checkMessageQuota } from "@/lib/usage";
 import { withSlot } from "@/lib/queue";
 import { debounce, DEBOUNCE_MS } from "@/lib/debounce";
 import {
+  isPureEmoji,
   isNoIntentOpener,
   isTrivialAck,
   cannedWelcome,
@@ -22,6 +23,7 @@ import {
   dedupeKey,
   refersToPastOrder,
 } from "@/lib/order-detect";
+import { parseIncomingMedia, hasMedia, describeMedia, type Media } from "@/lib/attachments";
 
 // The reply is generated in after() (see below), and on Vercel that background
 // work is bounded by THIS function's maxDuration — exceed it and the reply is
@@ -98,7 +100,11 @@ export async function POST(request: NextRequest) {
     if (!igAccountId) continue;
 
     for (const messaging of entry.messaging ?? []) {
-      if (!messaging?.message?.text) continue;
+      // Text OR media. This used to require text, so a guest who shared a post or
+      // reel with no caption was dropped here — never stored, never shown to staff,
+      // never replied to. Only genuinely empty events are skipped now.
+      const m = messaging?.message;
+      if (!m?.text && !hasMedia(m)) continue;
       // Echoes fire for EVERY outbound message on the account — ours (AI/dashboard,
       // already stored when sent) and anything sent manually from the connected
       // account's own Instagram app. processEcho tells the two apart by mid.
@@ -116,8 +122,10 @@ export async function POST(request: NextRequest) {
 
 async function processMessage(igAccountId: string, messaging: Messaging) {
   const igsid = messaging.sender.id;
-  const text = messaging.message.text;
+  // May be absent entirely on a media-only message (a shared post with no caption).
+  const text: string = messaging.message.text ?? "";
   const instagramMsgId = messaging.message.mid;
+  const media = parseIncomingMedia(messaging.message);
 
   try {
     // Which tenant owns this account? Unknown / unapproved => ignore. Never fall
@@ -132,21 +140,45 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
     }
 
     // Store user message. Duplicate mid (Meta retry) is now scoped per-conversation.
+    // `content` stays exactly what the guest typed — possibly "" — because the Inbox
+    // renders the media itself; synthesising text here would corrupt the transcript.
     const { error: insertError } = await supabaseAdmin.from("instagram_messages").insert({
       conversation_id: conversation.id,
       role: "user",
       content: text,
       instagram_msg_id: instagramMsgId,
+      attachments: media.length ? media : null,
     });
     if (insertError?.code === "23505") return;
+
+    // Surfaces any attachment type the parser didn't recognise, with its raw type,
+    // so an unanticipated payload shape is visible in logs instead of silently
+    // becoming a generic card.
+    for (const m of media) {
+      if (m.kind === "other") {
+        console.warn(`Unrecognised Instagram attachment type "${m.rawType}" on ${instagramMsgId}`);
+      }
+    }
 
     await touch(conversation.id);
 
     if (conversation.mode === "human") return;
 
+    // A bare emoji is not a question, wherever it lands in the thread. It used to
+    // count as a "no intent opener", so a guest who opened with just 👋 got the whole
+    // welcome message back — starting a conversation they never asked for. The message
+    // is still stored above (history and the Inbox stay accurate); only the reply is
+    // suppressed. "hi" / "hello" / "info?" still get the welcome. Placed before the
+    // count query below so it costs no round trip either.
+    // ...but a 😍 sent AGAINST a story or a shared post is real engagement, not a
+    // stray reaction, so media-bearing messages fall through to the normal AI path.
+    // The script's social-message rule keeps that reply warm and free of any
+    // "reservation or takeaway?" push.
+    if (isPureEmoji(text) && !media.length) return;
+
     // Cost pre-filter — runs before anything that touches the paid AI. A bare
-    // emoji or "thanks" used to trigger a full Claude call with the ~19K-char
-    // script every single time; neither case needs the model at all.
+    // "thanks" used to trigger a full Claude call with the ~19K-char script every
+    // single time; that case doesn't need the model at all.
     const { count: messageCount } = await supabaseAdmin
       .from("instagram_messages")
       .select("id", { count: "exact", head: true })
@@ -242,7 +274,7 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // reasoning from the top of the thread and never saw what was just said.
     const { data: rawHistory } = await supabaseAdmin
       .from("instagram_messages")
-      .select("role, content, created_at")
+      .select("role, content, created_at, attachments")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -301,13 +333,25 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     const ai = await getAIResponse(
       mergeConsecutiveTurns(
         filtered
-          .map((m) => ({
-            role: m.role as "user" | "assistant",
+          .map((m) => {
             // Never feed a raw handoff line back to the model — a previously-leaked one in the history
             // makes it echo the same order every turn (a loop). Strip it from assistant turns; a turn
             // that was ONLY a handoff line becomes empty and is dropped below.
-            content: m.role === "assistant" ? stripHandoff(m.content).trim() : m.content,
-          }))
+            if (m.role === "assistant") {
+              return { role: "assistant" as const, content: stripHandoff(m.content).trim() };
+            }
+            // Tell the model WHAT the guest was reacting to. Without this a story reply reads as a
+            // context-free remark, and a media-only message is an empty turn that the filter below
+            // drops — leaving a history that can end up empty, which makes getAIResponse serve the
+            // outage message. The descriptor exists only here; the stored transcript keeps the
+            // guest's real words.
+            const note = describeMedia((m.attachments as Media[] | null) ?? []);
+            const body = (m.content ?? "").trim();
+            return {
+              role: "user" as const,
+              content: note ? (body ? `${note} ${body}` : note) : body,
+            };
+          })
           .filter((m) => m.content.length > 0)
       ),
       { systemPrompt: captured ? `${account.systemPrompt}\n\n${captured}` : account.systemPrompt }

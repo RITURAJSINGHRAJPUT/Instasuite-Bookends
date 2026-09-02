@@ -66,6 +66,10 @@ export const config = {
   // text after the slash is empty, so `.*` would match and gate the landing
   // page. `.+` requires at least one character, so "/" falls through while
   // "/inbox", "/dashboard", "/settings", "/admin" still match.
+  // api/health IS excluded: it's the uncacheable liveness ping hit by the external
+  // keep-alive scheduler and Render's health check. Gated, it would 401 and the
+  // scheduler would report the app as down while it is perfectly healthy.
+  //
   // api/leads IS excluded: it's the public request-access endpoint behind the
   // landing page's form and must be reachable by anonymous visitors. It has its
   // own rate limiting + honeypot (see src/app/api/leads/route.ts) since there's
@@ -78,6 +82,6 @@ export const config = {
   // logged-out visitor's image request was redirected too. Images in public/ are
   // inherently public, so gating them was never intended.
   matcher: [
-    "/((?!api/webhook|api/cron|api/leads|auth/callback|auth/reset|login|privacy|terms|data-deletion|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif)).+)",
+    "/((?!api/webhook|api/cron|api/health|api/leads|auth/callback|auth/reset|login|privacy|terms|data-deletion|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|ico|webp|avif)).+)",
   ],
 };

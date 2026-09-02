@@ -33,8 +33,11 @@ const NO_INTENT_OPENERS = new Set([
   "info?",
 ]);
 
+// Emoji are deliberately NOT handled here. processMessage drops an emoji-only
+// message before this runs, so a bare 👋 now gets no reply at all rather than the
+// welcome — answering it started a conversation the guest never asked for. Keeping
+// the emoji rule in exactly one place stops the two paths from disagreeing.
 export function isNoIntentOpener(text: string): boolean {
-  if (isPureEmoji(text)) return true;
   return NO_INTENT_OPENERS.has(text.trim().toLowerCase());
 }
 
@@ -53,8 +56,8 @@ const TRIVIAL_ACKS = new Set([
   "cheers",
 ]);
 
+// Emoji handled by processMessage's isPureEmoji guard, not here — see isNoIntentOpener.
 export function isTrivialAck(text: string): boolean {
-  if (isPureEmoji(text)) return true;
   return TRIVIAL_ACKS.has(text.trim().toLowerCase());
 }
 

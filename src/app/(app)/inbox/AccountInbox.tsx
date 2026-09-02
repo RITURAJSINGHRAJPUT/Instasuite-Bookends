@@ -18,9 +18,11 @@ import {
   Receipt,
   AlertTriangle,
   Zap,
+  ImageOff,
   X,
 } from "lucide-react";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
+import type { Media, MediaKind } from "@/lib/attachments";
 
 // One complete inbox for a single Instagram account: header, conversation list,
 // thread, composer. Rendered once per account so two accounts can be worked side
@@ -107,6 +109,62 @@ export function Avatar({
   return (
     <div className={cls} style={{ ...style, background: "var(--brand-gradient)" }}>
       {getInitials(name, igsid)}
+    </div>
+  );
+}
+
+const MEDIA_LABEL: Record<MediaKind, string> = {
+  story_reply: "Replied to your story",
+  story_mention: "Mentioned you in their story",
+  post: "Shared a post",
+  reel: "Shared a reel",
+  image: "Sent a photo",
+  video: "Sent a video",
+  audio: "Sent a voice message",
+  other: "Sent an attachment",
+};
+
+/**
+ * A story reply / shared post, shown above the message the way Instagram does.
+ *
+ * We store Meta's CDN URL rather than a copy of the file, and those links are
+ * short-lived — so an expired thumbnail is the NORMAL end state for older chats,
+ * not an error. `failed` swaps in a deliberate placeholder so it reads as "this
+ * has aged out" rather than looking broken.
+ */
+function MediaCard({ media, align }: { media: Media; align: "start" | "end" }) {
+  const [failed, setFailed] = useState(false);
+  const label = MEDIA_LABEL[media.kind] ?? MEDIA_LABEL.other;
+  const showImage = !!media.url && !failed;
+
+  return (
+    <div className={`mb-1 flex flex-col ${align === "start" ? "items-start" : "items-end"}`}>
+      <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+        {label}
+      </p>
+      {showImage ? (
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
+          <Image
+            src={media.url as string}
+            alt={label}
+            width={160}
+            height={280}
+            className="h-[200px] w-[112px] object-cover"
+            onError={() => setFailed(true)}
+            unoptimized
+          />
+        </div>
+      ) : (
+        <div className="flex h-[200px] w-[112px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-1)] px-2 text-center">
+          <ImageOff size={16} className="text-[var(--text-5)]" />
+          <p className="text-[10px] leading-tight text-[var(--text-5)]">No longer available</p>
+        </div>
+      )}
+      {media.title && (
+        <p className="mt-1 max-w-[200px] truncate px-1 text-[11px] text-[var(--text-4)]">
+          {media.title}
+        </p>
+      )}
     </div>
   );
 }
@@ -608,16 +666,23 @@ export default function AccountInbox({
                           isUser ? "items-start" : "items-end"
                         }`}
                       >
-                        <div
-                          className={`rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
-                            isUser
-                              ? "rounded-tl-sm border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)]"
-                              : "rounded-tr-sm text-white"
-                          }`}
-                          style={!isUser ? { background: "var(--accent)" } : undefined}
-                        >
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                        </div>
+                        {/* Story reply / shared post, above the text the way Instagram shows it. */}
+                        {msg.attachments?.map((media, mi) => (
+                          <MediaCard key={mi} media={media} align={isUser ? "start" : "end"} />
+                        ))}
+                        {/* A media-only message has no text — don't render an empty bubble. */}
+                        {msg.content?.trim() && (
+                          <div
+                            className={`rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
+                              isUser
+                                ? "rounded-tl-sm border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)]"
+                                : "rounded-tr-sm text-white"
+                            }`}
+                            style={!isUser ? { background: "var(--accent)" } : undefined}
+                          >
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        )}
                         {showTime && (
                           <p className="mt-1.5 px-1 text-[10px] text-[var(--text-5)]">
                             {formatTime(msg.created_at)}

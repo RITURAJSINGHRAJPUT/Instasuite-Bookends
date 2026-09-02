@@ -1,3 +1,5 @@
+import type { Media } from "./attachments";
+
 export interface Conversation {
   id: string;
   igsid: string;
@@ -23,6 +25,12 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   instagram_msg_id: string | null;
+  /**
+   * Story replies, story mentions and shared posts/reels (see src/lib/attachments.ts).
+   * Null on a plain text message. The URLs are Meta's short-lived CDN links, so the
+   * Inbox must tolerate them expiring.
+   */
+  attachments: Media[] | null;
   created_at: string;
 }
 
