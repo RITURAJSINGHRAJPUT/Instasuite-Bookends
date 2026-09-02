@@ -193,6 +193,8 @@ export default function AccountInbox({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Only true on a FIRST open of a chat — a cached one paints instantly with no spinner.
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // Set when Instagram refused the reply (too long, 24h window closed, dead token).
@@ -343,15 +345,47 @@ export default function AccountInbox({
 
   const selected = conversations.find((c) => c.id === selectedId);
 
+  // Per-conversation message cache, so reopening a chat paints instantly instead of
+  // waiting on the network again. A ref, not state: writing to it must never trigger
+  // a re-render on its own.
+  const messageCache = useRef(new Map<string, Message[]>());
+  // Which conversation the newest request belongs to. Switching A -> B -> C fires
+  // three overlapping requests that can resolve out of order; without this guard a
+  // slow response for A could land after C and paint the wrong person's messages.
+  const latestRequest = useRef<string | null>(null);
+
   const fetchMessages = useCallback(async (convoId: string) => {
-    const res = await fetch(`/api/conversations/${convoId}/messages`);
-    const data = await res.json();
-    setMessages(Array.isArray(data) ? data : []);
+    latestRequest.current = convoId;
+    try {
+      const res = await fetch(`/api/conversations/${convoId}/messages`);
+      const data = await res.json();
+      const list: Message[] = Array.isArray(data) ? data : [];
+      messageCache.current.set(convoId, list);
+      // Only paint if this is still the conversation on screen.
+      if (latestRequest.current === convoId) {
+        setMessages(list);
+        setLoadingMessages(false);
+      }
+    } catch {
+      if (latestRequest.current === convoId) setLoadingMessages(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (selectedId) fetchMessages(selectedId);
-    else setMessages([]);
+    if (!selectedId) {
+      setMessages([]);
+      setLoadingMessages(false);
+      return;
+    }
+    // Paint SYNCHRONOUSLY on switch — cached messages if we have them, otherwise
+    // empty. Previously `setMessages` only ran once the fetch resolved, so the
+    // PREVIOUS person's messages stayed on screen for the whole round trip, which
+    // is what made switching chats feel laggy.
+    const cached = messageCache.current.get(selectedId);
+    setMessages(cached ?? []);
+    setLoadingMessages(!cached);
+    // Always revalidate in the background, so a cached view is never stale for long.
+    fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
 
   useEffect(() => {
@@ -363,9 +397,14 @@ export default function AccountInbox({
   // the same prop and correctly ignores it.
   useEffect(() => {
     if (!liveMessage || liveMessage.conversation_id !== selectedId) return;
-    setMessages((prev) =>
-      prev.some((m) => m.id === liveMessage.id) ? prev : [...prev, liveMessage]
-    );
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === liveMessage.id)) return prev;
+      const next = [...prev, liveMessage];
+      // Keep the cache in step, or switching away and back would drop this message
+      // until the background revalidate caught up.
+      messageCache.current.set(liveMessage.conversation_id, next);
+      return next;
+    });
   }, [liveMessage, selectedId]);
 
   async function toggleMode() {
@@ -644,6 +683,11 @@ export default function AccountInbox({
                 )}
 
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
+                {loadingMessages && (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 size={16} className="animate-spin text-[var(--text-5)]" />
+                  </div>
+                )}
                 {messages.map((msg, i) => {
                   const isUser = msg.role === "user";
                   const showTime =
