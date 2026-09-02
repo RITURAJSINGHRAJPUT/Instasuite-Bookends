@@ -27,9 +27,13 @@ Supabase renders Go templates. Available:
 | `{{ .Token }}` / `{{ .TokenHash }}` | 6-digit OTP / hash, if using code-based flows |
 
 `{{ .ConfirmationURL }}` only lands on the right domain when **Authentication → URL
-Configuration** is correct — Site URL `https://instasuite.click2pdf.in` and a redirect entry
-of `https://instasuite.click2pdf.in/**`. Without the wildcard, Supabase silently rewrites the
-redirect to the Site URL and the link goes to the wrong place.
+Configuration** is correct — Site URL `https://instasuite.in` and a redirect entry of
+`https://instasuite.in/**`. Without the wildcard, Supabase silently rewrites the redirect to
+the Site URL and the link goes to the wrong place.
+
+The app itself does not hardcode this: `/api/admin/users` builds `redirectTo` from
+`request.nextUrl.origin`, so the link follows whichever domain the dashboard was opened on.
+The Site URL and the allowlist are what actually decide where a recipient lands.
 
 ## Why these templates look the way they do
 
@@ -48,26 +52,29 @@ filter as much as the reader:
 
 ## DNS (deliverability)
 
-Already in place on `click2pdf.in`, verified:
+Sending domain is **`instasuite.in`** (moved from `click2pdf.in`). Mail is sent by Resend via
+Supabase's custom SMTP, so BOTH have to agree on the domain:
 
-- **DKIM** — `resend._domainkey.click2pdf.in`, signs `d=click2pdf.in`, so it aligns.
-- **SPF** — on `send.click2pdf.in` (Resend's Return-Path, which is the domain SPF actually
-  authenticates) → `include:amazonses.com ~all`.
-- **DMARC** — `p=quarantine; adkim=r; aspf=r`, set by the registrar.
+1. **Resend** → Domains → add `instasuite.in` and add the DKIM/SPF records it gives you.
+   Wait for it to show *Verified* — Resend refuses to send from an unverified domain, and
+   that rejection surfaces in the app as the "couldn't email" fallback path.
+2. **Supabase** → Authentication → SMTP Settings → set the sender address to something on
+   `instasuite.in` (e.g. `no-reply@instasuite.in`). This is the setting that actually
+   changes who the mail is *from*; the templates in this folder only affect the body.
+3. **Supabase** → Authentication → URL Configuration → Site URL and redirect allowlist, as
+   above.
 
-Worth adding on the **root** domain:
+Records needed on `instasuite.in`, mirroring what was verified on the old domain:
 
-```
-TXT  click2pdf.in   v=spf1 include:amazonses.com ~all
-```
+- **DKIM** — the `resend._domainkey` TXT record Resend generates, so `d=instasuite.in` aligns.
+- **SPF** — on Resend's Return-Path subdomain (`send.instasuite.in`) →
+  `v=spf1 include:amazonses.com ~all`.
+- **DMARC** — `_dmarc.instasuite.in` → start at `p=none` while you confirm SPF and DKIM pass,
+  then tighten to `p=quarantine`. Going straight to quarantine on an unproven domain sends
+  your own invites to spam if anything is misaligned.
 
-Safe: there is no existing root SPF to conflict with, root MX is Amazon SES inbound (not
-Google Workspace), and Resend is unaffected because its Return-Path is the `send.` subdomain
-with its own SPF. `~all` softfails rather than hard-rejecting.
-
-⚠️ The stale `brevo-code` TXT record has no matching SPF include. If anything ever sends
-through Brevo from this domain it will fail DMARC — and since the policy is `p=quarantine`,
-that mail goes straight to spam.
+⚠️ Reputation does NOT transfer between domains. `instasuite.in` starts cold even though
+`click2pdf.in` was warm, so expect the first sends to be filtered more aggressively.
 
 ## Testing
 
