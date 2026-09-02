@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/supabase-server";
 import { can, needsSubscription, ROLE_CAPABILITIES } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { supabaseAdmin } from "@/lib/supabase";
 import { periodStart } from "@/lib/usage";
 
@@ -233,6 +234,13 @@ export async function POST(request: NextRequest) {
   // 201 even if the email and the link both failed — the account is real at this
   // point, and rolling back a valid user over a delivery problem is worse. Say
   // what happened instead.
+  await logAudit(session, {
+    action: "user.create",
+    targetType: "user",
+    targetId: userId,
+    targetLabel: `${email} (${role})`,
+  });
+
   return Response.json(
     {
       id: userId,

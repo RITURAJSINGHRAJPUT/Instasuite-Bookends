@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 async function ownsBusiness(
   businessId: string,
@@ -28,11 +29,21 @@ export async function DELETE(
   if (!can(ctx.user.role, "businesses")) return Response.json({ error: "Not found" }, { status: 404 });
   if (!(await ownsBusiness(id, ctx))) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("outlets")
     .delete()
     .eq("id", outletId)
-    .eq("business_id", id);
+    .eq("business_id", id)
+    .select("name")
+    .maybeSingle<{ name: string }>();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "outlet.delete",
+    targetType: "outlet",
+    targetId: outletId,
+    targetLabel: data?.name ?? null,
+  });
+
   return Response.json({ success: true });
 }

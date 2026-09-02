@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { sendAndStore } from "@/lib/outbound";
 import { getContext, getOwnedConversation } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { resolveAccountByIgId } from "@/lib/tenant";
 
 export async function POST(
@@ -49,6 +50,13 @@ export async function POST(
       { status: 502 }
     );
   }
+
+  await logAudit(ctx.user, {
+    action: "conversation.send",
+    targetType: "conversation",
+    targetId: id,
+    targetLabel: conversation.name || conversation.username || conversation.igsid,
+  });
 
   return Response.json({ ok: true, parts: sent.sentParts });
 }

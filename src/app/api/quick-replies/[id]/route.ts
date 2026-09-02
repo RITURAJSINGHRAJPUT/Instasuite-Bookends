@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 async function ownsBusiness(
   businessId: string,
@@ -36,5 +37,8 @@ export async function DELETE(_r: NextRequest, { params }: { params: Promise<{ id
 
   const { error } = await supabaseAdmin.from("quick_replies").delete().eq("id", id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, { action: "quick_reply.delete", targetType: "quick_reply", targetId: id });
+
   return Response.json({ success: true });
 }

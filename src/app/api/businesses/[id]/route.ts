@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 export async function PATCH(
   request: NextRequest,
@@ -48,6 +49,14 @@ export async function PATCH(
   const { data, error } = await q.select("id, name, status, default_script_id, public_handle").maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!data) return Response.json({ error: "Not found" }, { status: 404 });
+
+  await logAudit(ctx.user, {
+    action: "business.update",
+    targetType: "business",
+    targetId: id,
+    targetLabel: data.name,
+  });
+
   return Response.json(data);
 }
 
@@ -68,8 +77,19 @@ export async function DELETE(
   let q = supabaseAdmin.from("businesses").delete().eq("id", id);
   if (!isStaff(ctx.user.role)) q = q.eq("client_id", ctx.user.id); // same ownership predicate as PATCH
 
-  const { data, error } = await q.select("id").maybeSingle();
+  const { data, error } = await q.select("id, name").maybeSingle<{ id: string; name: string }>();
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!data) return Response.json({ error: "Not found" }, { status: 404 });
+
+  // The name comes back from the delete's own RETURNING clause — the row is gone by
+  // now, so this is the last chance to record WHICH business was removed. A cascade
+  // this wide (scripts, accounts, conversations, orders) deserves a named entry.
+  await logAudit(ctx.user, {
+    action: "business.delete",
+    targetType: "business",
+    targetId: id,
+    targetLabel: data.name,
+  });
+
   return Response.json({ success: true });
 }

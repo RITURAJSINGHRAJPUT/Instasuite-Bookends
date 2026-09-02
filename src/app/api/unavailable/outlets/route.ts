@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Closed-outlet closures — sibling of /api/unavailable (which handles 86'd dishes). Same ownership,
 // scoping, and IST-window logic; the difference is `outlet` is required and there's no `dish`.
@@ -111,5 +112,13 @@ export async function POST(request: NextRequest) {
     .select("id, business_id, outlet, note, starts_at, ends_at, created_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "unavailable.outlet_close",
+    targetType: "unavailable_outlet",
+    targetId: data.id,
+    targetLabel: data.outlet,
+  });
+
   return Response.json(data, { status: 201 });
 }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   const ctx = await getContext();
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
   if (script) {
     await supabaseAdmin.from("businesses").update({ default_script_id: script.id }).eq("id", data.id);
   }
+
+  await logAudit(ctx.user, {
+    action: "business.create",
+    targetType: "business",
+    targetId: data.id,
+    targetLabel: data.name,
+  });
 
   return Response.json(data, { status: 201 });
 }

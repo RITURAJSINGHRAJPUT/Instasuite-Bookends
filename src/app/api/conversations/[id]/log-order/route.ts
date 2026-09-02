@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext, getOwnedConversation } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Lets staff log an order/reservation they handled manually in the chat (typed
 // their own reply instead of letting the AI produce the structured handoff
@@ -88,5 +89,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "order.log_manual",
+    targetType: "order",
+    targetId: data.id,
+    targetLabel: customerName || data.kind,
+  });
+
   return Response.json(data, { status: 201 });
 }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { resolveAccountByIgId } from "@/lib/tenant";
 import { sendAndStore } from "@/lib/outbound";
 import { feedbackMessage } from "@/lib/feedback";
@@ -87,6 +88,13 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     .update({ feedback_sent_at: sentAt })
     .eq("id", id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "order.feedback_dm",
+    targetType: "order",
+    targetId: id,
+    targetLabel: order.igsid,
+  });
 
   return Response.json({ sent: true, feedback_sent_at: sentAt });
 }

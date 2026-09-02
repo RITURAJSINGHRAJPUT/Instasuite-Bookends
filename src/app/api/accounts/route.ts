@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/crypto";
 import { fetchConnectedAccount, subscribeToWebhooks } from "@/lib/instagram";
 
@@ -112,6 +113,13 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     warning = `Connected, but subscribing to messages failed: ${(err as Error).message}`;
   }
+
+  await logAudit(ctx.user, {
+    action: "account.connect",
+    targetType: "instagram_account",
+    targetId: data.id,
+    targetLabel: data.username ?? data.ig_account_id,
+  });
 
   return Response.json(warning ? { ...data, warning } : data, { status: 201 });
 }

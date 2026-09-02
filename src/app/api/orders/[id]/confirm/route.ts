@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { resolveAccountByIgId } from "@/lib/tenant";
 import { sendAndStore } from "@/lib/outbound";
 import { cancelOrderAndNotify, type OrderForCancel } from "@/lib/orders";
@@ -139,6 +140,13 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
   }
+
+  await logAudit(ctx.user, {
+    action: "order.confirm",
+    targetType: "order",
+    targetId: order.id,
+    targetLabel: order.kind,
+  });
 
   // The order IS confirmed regardless; surface the notification failure so staff know
   // the guest was never actually told.

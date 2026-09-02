@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Verify the caller owns the business (or is staff). Mirrors ownsScript in the
 // [id] route — the ownership predicate for anything under a business.
@@ -95,5 +96,13 @@ export async function POST(request: NextRequest) {
     .select("id, name, business_id, updated_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "script.create",
+    targetType: "script",
+    targetId: data.id,
+    targetLabel: data.name,
+  });
+
   return Response.json(data, { status: 201 });
 }

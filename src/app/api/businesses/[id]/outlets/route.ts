@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Per-business outlets — the structured list the Unavailable page turns into a dropdown, managed on
 // the Businesses page. Gated by the `businesses` capability + per-business ownership.
@@ -57,5 +58,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (error.code === "23505") return Response.json({ error: "That outlet already exists." }, { status: 409 });
     return Response.json({ error: error.message }, { status: 500 });
   }
+  await logAudit(ctx.user, {
+    action: "outlet.create",
+    targetType: "outlet",
+    targetId: data.id,
+    targetLabel: data.name,
+  });
+
   return Response.json(data, { status: 201 });
 }

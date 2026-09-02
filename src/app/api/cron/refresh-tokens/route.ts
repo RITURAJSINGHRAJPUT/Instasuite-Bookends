@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Housekeeping, piggybacked on the daily run: drop audit rows older than a year.
+  // Deliberately not on the 10-minute feedback cron — pruning year-old rows has no
+  // business running 144 times a day. Best-effort: a failure here must not stop the
+  // token refresh, which is the job that actually matters.
+  const { error: pruneError } = await supabaseAdmin
+    .from("audit_log")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 365 * 86400_000).toISOString());
+  if (pruneError) console.warn("audit_log prune failed:", pruneError.message);
+
   const cutoff = new Date(Date.now() + REFRESH_WITHIN_DAYS * 86400_000).toISOString();
 
   // Unknown expiry (null) counts as due — that's how accounts connected before

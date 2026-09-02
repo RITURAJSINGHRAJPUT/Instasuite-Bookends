@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext, getOwnedConversation } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 export async function PATCH(
   request: NextRequest,
@@ -43,6 +44,14 @@ export async function PATCH(
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: body.mode ? `conversation.mode_${body.mode}` : "conversation.dismiss_notice",
+    targetType: "conversation",
+    targetId: id,
+    targetLabel: owned.name || owned.username || owned.igsid,
+  });
+
   return Response.json(data);
 }
 
@@ -66,5 +75,15 @@ export async function DELETE(
     .in("instagram_account_id", ctx.accountIds);
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  // Labelled from the row we read BEFORE the delete — the chat and its messages are
+  // gone now, so this is the only remaining record of whose conversation it was.
+  await logAudit(ctx.user, {
+    action: "conversation.delete",
+    targetType: "conversation",
+    targetId: id,
+    targetLabel: owned.name || owned.username || owned.igsid,
+  });
+
   return Response.json({ success: true });
 }

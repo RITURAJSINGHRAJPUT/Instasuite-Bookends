@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { resolveAccountByIgId } from "@/lib/tenant";
 import { sendAndStore } from "@/lib/outbound";
 
@@ -80,6 +81,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!updated) return Response.json({ error: "Not found" }, { status: 404 });
+
+  // Logged here, not after the notify block below: the edit is already committed at
+  // this point and three of the paths below return early, so logging later would
+  // silently miss real edits.
+  await logAudit(ctx.user, {
+    action: "order.update",
+    targetType: "order",
+    targetId: id,
+    targetLabel: updated.kind ?? order.kind,
+  });
 
   if (!notify) return Response.json({ ...updated, notified: false });
 

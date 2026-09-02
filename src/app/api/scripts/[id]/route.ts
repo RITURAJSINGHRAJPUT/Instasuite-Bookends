@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 async function ownsScript(scriptId: string, ctx: NonNullable<Awaited<ReturnType<typeof getContext>>>) {
   // Name the FK: scripts<->businesses has two relationships, so a bare embed is
@@ -46,5 +47,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { data, error } = await supabaseAdmin
     .from("scripts").update(patch).eq("id", id).select("id, name, updated_at").single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "script.update",
+    targetType: "script",
+    targetId: id,
+    targetLabel: data.name,
+  });
+
   return Response.json(data);
 }

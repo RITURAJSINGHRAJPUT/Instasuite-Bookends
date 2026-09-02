@@ -23,6 +23,7 @@ import {
   Flag,
   CircleSlash,
   MessageSquareText,
+  ScrollText,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { ROLE_OPTIONS, type Feature } from "@/lib/permissions";
@@ -90,6 +91,7 @@ const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Set
 const SETTINGS_CHILDREN: NavItem[] = [
   { href: "/businesses", label: "Businesses", icon: Building2, feature: "businesses" },
   { href: "/users", label: "Users", icon: Users, feature: "users" },
+  { href: "/activity", label: "Activity", icon: ScrollText, feature: "audit" },
   { href: "/admin", label: "Admin", icon: ShieldCheck, feature: "admin" },
 ];
 

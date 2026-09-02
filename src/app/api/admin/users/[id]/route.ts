@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/supabase-server";
 import { can, ROLE_CAPABILITIES } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { supabaseAdmin } from "@/lib/supabase";
 
 const ROLES = Object.keys(ROLE_CAPABILITIES);
@@ -129,7 +130,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .from("profiles")
     .select("id, email, role")
     .eq("id", id)
-    .maybeSingle();
+    .maybeSingle<{ id: string; email: string | null; role: string }>();
+
+  // A role change is the single most sensitive action in the app, so it gets its own
+  // entry naming both roles rather than a generic "user.update".
+  if (body?.role !== undefined && fresh && fresh.role !== target.role) {
+    await logAudit(session, {
+      action: "user.role_change",
+      targetType: "user",
+      targetId: id,
+      targetLabel: `${target.email ?? id}: ${target.role} -> ${fresh.role}`,
+    });
+  } else {
+    await logAudit(session, {
+      action: "user.update",
+      targetType: "user",
+      targetId: id,
+      targetLabel: fresh?.email ?? target.email,
+    });
+  }
+
   return Response.json(fresh);
 }
 
@@ -186,6 +206,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   // profile row instead would leave a live, login-capable auth account.
   const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  // The deleted user's OWN audit rows survive this — actor_id is `on delete set
+  // null` and the email/role are snapshotted per row, so their trail stays readable.
+  // This entry records who removed them.
+  await logAudit(session, {
+    action: "user.delete",
+    targetType: "user",
+    targetId: id,
+    targetLabel: target.email,
+  });
 
   return Response.json({
     id,

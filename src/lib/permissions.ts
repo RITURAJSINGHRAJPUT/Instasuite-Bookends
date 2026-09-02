@@ -20,19 +20,22 @@ export const FEATURES = [
   "settings",
   "admin",
   "users",
+  "audit",
 ] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type Role = "super_admin" | "admin" | "manager" | "agent" | "client";
 
 // What each role can reach. super_admin has everything; admin has everything but
-// Users (can't manage teammates); manager runs the day-to-day (no Settings/Admin/
-// Businesses/Scripts — connecting Instagram accounts and editing the AI script
-// stay admin+); agent works the Inbox only; client is the legacy own-scoped tenant.
+// Users and Activity — it can't manage teammates, and an audit log the audited
+// party can read is one they could quietly work around; manager runs the day-to-day
+// (no Settings/Admin/Businesses/Scripts — connecting Instagram accounts and editing
+// the AI script stay admin+); agent works the Inbox only; client is the legacy
+// own-scoped tenant.
 // `orders` tracks `overview`: it reads the same overview-gated analytics endpoint,
 // so its viewers must be a subset of overview's or they'd 404 on their own page.
 export const ROLE_CAPABILITIES: Record<Role, Feature[]> = {
-  super_admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings", "admin", "users"],
+  super_admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings", "admin", "users", "audit"],
   admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings", "admin"],
   manager: ["overview", "inbox", "orders", "review", "unavailable"],
   agent: ["inbox"],
@@ -72,6 +75,7 @@ export const FEATURE_ROUTE: Record<Feature, string> = {
   settings: "/settings",
   admin: "/admin",
   users: "/users",
+  audit: "/activity",
 };
 
 // Order used to choose a landing page: the first capability a role has, top-down.
@@ -88,6 +92,7 @@ const LANDING_ORDER: Feature[] = [
   "settings",
   "admin",
   "users",
+  "audit",
 ];
 
 export function firstAllowedRoute(role: string | null | undefined): string {

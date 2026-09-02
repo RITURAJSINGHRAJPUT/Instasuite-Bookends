@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/supabase-server";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET() {
@@ -13,7 +14,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const user = await getSessionUser();
-  if (!can(user?.role, "admin")) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!user || !can(user.role, "admin")) return Response.json({ error: "Not found" }, { status: 404 });
 
   const b = await request.json();
   const name = String(b?.name ?? "").trim();
@@ -36,5 +37,13 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(user, {
+    action: "plan.create",
+    targetType: "plan",
+    targetId: data.id,
+    targetLabel: name,
+  });
+
   return Response.json(data, { status: 201 });
 }

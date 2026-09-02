@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Mark a review item done. Unlike orders' confirm, this sends NO DM — the human replies to the guest
 // in the Inbox (the conversation was flipped to human mode at capture). This route just flips the row's
@@ -42,5 +43,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .select("id, status, completed_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: `review.${nextStatus}`,
+    targetType: "review_item",
+    targetId: id,
+  });
+
   return Response.json(updated);
 }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 async function ownsAccount(accountId: string, ctx: NonNullable<Awaited<ReturnType<typeof getContext>>>) {
   if (isStaff(ctx.user.role)) {
@@ -43,6 +44,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .from("instagram_accounts").update({ script_id: scriptId }).eq("id", id)
     .select("id, username, status, script_id").single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "account.update",
+    targetType: "instagram_account",
+    targetId: id,
+    targetLabel: data.username,
+  });
+
   return Response.json(data);
 }
 
@@ -53,7 +62,17 @@ export async function DELETE(_r: NextRequest, { params }: { params: Promise<{ id
   if (!can(ctx.user.role, "businesses")) return Response.json({ error: "Not found" }, { status: 404 });
   if (!(await ownsAccount(id, ctx))) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const { error } = await supabaseAdmin.from("instagram_accounts").delete().eq("id", id);
+  const { data, error } = await supabaseAdmin
+    .from("instagram_accounts").delete().eq("id", id)
+    .select("username").maybeSingle<{ username: string | null }>();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "account.disconnect",
+    targetType: "instagram_account",
+    targetId: id,
+    targetLabel: data?.username ?? null,
+  });
+
   return Response.json({ success: true });
 }

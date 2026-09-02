@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Verify the caller owns the business (or is staff) — the ownership predicate for
 // anything hanging off a business. Mirrors ownsBusiness in /api/scripts.
@@ -116,5 +117,13 @@ export async function POST(request: NextRequest) {
     .select("id, business_id, dish, outlet, note, starts_at, ends_at, created_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "unavailable.dish_add",
+    targetType: "unavailable_dish",
+    targetId: data.id,
+    targetLabel: data.outlet ? `${data.dish} (${data.outlet})` : data.dish,
+  });
+
   return Response.json(data, { status: 201 });
 }

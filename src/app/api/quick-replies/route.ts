@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
+import { logAudit } from "@/lib/audit";
 
 // Verify the caller owns the business (or is staff). Mirrors ownsBusiness in
 // /api/scripts and /api/unavailable.
@@ -87,5 +88,13 @@ export async function POST(request: NextRequest) {
     .select("id, business_id, title, message, created_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  await logAudit(ctx.user, {
+    action: "quick_reply.create",
+    targetType: "quick_reply",
+    targetId: data.id,
+    targetLabel: data.title,
+  });
+
   return Response.json(data, { status: 201 });
 }
