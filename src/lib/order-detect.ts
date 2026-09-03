@@ -43,10 +43,25 @@ export type DetectedReview = {
 
 // Map the AI's free-text `Type:` onto a known bucket. Substring match so "paid collab" → collaboration,
 // "payment issue" → billing, etc.; unrecognised (or missing) falls back to "other".
+//
+// The collaboration list is deliberately wide: that bucket is the one the webhook
+// suppresses the AI's reply for, so a partnership pitch filed as "other" would get
+// answered automatically — the exact thing the suppression exists to prevent. Widening
+// it is safe in one direction only, because this runs on matters the AI has ALREADY
+// flagged for review; it can never silence an ordinary guest.
+//
+// It stays tight in the other direction, though: collaboration is tested BEFORE
+// complaint, so an over-broad term here (a bare "media", say, matching "social media
+// complaint") would silence someone with a real problem. Every term below reads as
+// partnership-shaped on its own.
 function normalizeCategory(type: string | undefined): ReviewCategory {
   const t = (type || "").toLowerCase();
   if (/cancel/.test(t)) return "cancellation";
-  if (/collab|partner|promo|sponsor/.test(t)) return "collaboration";
+  if (
+    /collab|partner|promo|sponsor|barter|influencer|ambassador|ugc|shout ?out|brand deal|advertis|marketing/.test(t)
+  ) {
+    return "collaboration";
+  }
   if (/complain|issue|problem|refund|angry/.test(t)) return "complaint";
   if (/bill|payment|invoice|charge/.test(t)) return "billing";
   if (/event|party|large group|group booking|catering/.test(t)) return "event";

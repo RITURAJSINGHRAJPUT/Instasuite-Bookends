@@ -361,6 +361,27 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // needs a human — strip it so the guest sees only the clean reply; the row is captured below.
     const detected = detectHandoff(ai.text);
     const detectedReview = detectReview(ai.text);
+
+    // Collaboration / paid-promo pitches are never answered by the AI. The brand's
+    // position on partnerships isn't the model's to improvise, so the request goes
+    // to Review silently and a human sends the standing reply from there (the
+    // "Send collab decline" button on the Review page).
+    //
+    // Returning early skips the send entirely — the AI's drafted reply is discarded,
+    // not stored, so the Inbox shows the guest's message with no response. The three
+    // steps below must still run: the model was called and billed either way, the
+    // Review row IS the point of this branch, and without the human flip the guest's
+    // next message would just get an AI reply anyway.
+    if (detectedReview?.category === "collaboration") {
+      await recordUsage(account, ai);
+      await captureReview(account, conversation, detectedReview);
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ mode: "human", human_handoff_reason: "review" })
+        .eq("id", conversation.id);
+      return;
+    }
+
     const stripped = (detected || detectedReview ? stripHandoff(ai.text) : ai.text).trim();
     // NEVER leak the raw internal handoff line to the guest. If stripping leaves nothing (the model
     // replied with only the note), send a safe line instead of the raw grammar — and this clean text

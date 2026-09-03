@@ -11,7 +11,9 @@ import {
   Check,
   Loader2,
   MessagesSquare,
+  Send,
 } from "lucide-react";
+import { COLLAB_DECLINE, COLLAB_DECLINE_LABEL } from "@/lib/review-responses";
 
 // The Review queue — non-order handoffs the AI flagged for a human (the `review_items` ledger),
 // captured from the AI's REVIEW line. Each pending item can be Marked reviewed, which flips the row
@@ -84,6 +86,10 @@ function ReviewInner() {
   const [category, setCategory] = useState<"all" | Category>("all");
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  // Which item's decline is awaiting confirmation. The button sits on EVERY category,
+  // so it must never be one click away from sending a collab reply to a complaint —
+  // the first click only reveals the message for staff to read.
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -153,7 +159,7 @@ function ReviewInner() {
 
   useEffect(() => {
     if (!selected) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelected(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closePanel();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
@@ -165,6 +171,28 @@ function ReviewInner() {
       if (res.ok) {
         setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "completed" } : r)));
         setSelected((s) => (s && s.id === id ? { ...s, status: "completed" } : s));
+      }
+    } finally {
+      setWorking(null);
+      load();
+    }
+  }
+
+  // Closing the panel abandons any pending confirm step — reopening the same item
+  // should start from the buttons again, not a half-finished send.
+  function closePanel() {
+    setSelected(null);
+    setConfirming(null);
+  }
+
+  async function sendDecline(id: string) {
+    setWorking(id);
+    try {
+      const res = await fetch(`/api/review/${id}/respond`, { method: "POST" });
+      if (res.ok) {
+        setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "completed" } : r)));
+        setSelected((s) => (s && s.id === id ? { ...s, status: "completed" } : s));
+        setConfirming(null);
       }
     } finally {
       setWorking(null);
@@ -269,7 +297,7 @@ function ReviewInner() {
       {selected && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-sm"
-          onClick={() => setSelected(null)}
+          onClick={() => closePanel()}
         >
           <div
             className="w-full max-w-[440px] rounded-2xl border border-[var(--border-strong)] bg-[var(--modal-bg)] p-5 shadow-2xl"
@@ -290,7 +318,7 @@ function ReviewInner() {
                 </div>
               </div>
               <button
-                onClick={() => setSelected(null)}
+                onClick={() => closePanel()}
                 aria-label="Close"
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--text-4)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-2)]"
               >
@@ -306,6 +334,41 @@ function ReviewInner() {
               {selected.details || "No further detail captured."}
             </p>
 
+            {/* Confirm step: the exact text that will be sent, shown before anything
+                goes out. The button is available on every category, so staff read
+                what they're about to send rather than trusting the label. */}
+            {confirming === selected.id && (
+              <div className="mt-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent)]">
+                  This message will be sent to {selected.customer_name || "the guest"}
+                </p>
+                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+                  {COLLAB_DECLINE}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => setConfirming(null)}
+                    disabled={working === selected.id}
+                    className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)] disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => sendDecline(selected.id)}
+                    disabled={working === selected.id}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                  >
+                    {working === selected.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Send size={14} />
+                    )}
+                    Send it
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 flex items-center gap-2">
               <Link
                 href="/inbox"
@@ -314,14 +377,25 @@ function ReviewInner() {
                 <MessagesSquare size={14} /> Open in Inbox
               </Link>
               {selected.status === "pending" ? (
-                <button
-                  onClick={() => markReviewed(selected.id)}
-                  disabled={working === selected.id}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-                >
-                  {working === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  Mark reviewed
-                </button>
+                <>
+                  {confirming !== selected.id && (
+                    <button
+                      onClick={() => setConfirming(selected.id)}
+                      disabled={working === selected.id}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)] disabled:opacity-40"
+                    >
+                      <Send size={14} /> {COLLAB_DECLINE_LABEL}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => markReviewed(selected.id)}
+                    disabled={working === selected.id}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                  >
+                    {working === selected.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    Mark reviewed
+                  </button>
+                </>
               ) : (
                 <span className="flex flex-1 items-center justify-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
                   <Check size={14} /> {selected.status === "dismissed" ? "Dismissed" : "Reviewed"}
