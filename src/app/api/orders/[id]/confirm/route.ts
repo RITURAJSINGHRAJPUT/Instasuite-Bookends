@@ -12,6 +12,22 @@ import { cancelOrderAndNotify, type OrderForCancel } from "@/lib/orders";
 // confirmation DM goes out either way, and we only mirror it into the transcript if the chat still exists.
 
 function confirmationText(kind: string, details: string): string {
+  // Reservations use the brand's own wording, with no details block — this is the text
+  // staff were already typing by hand before there was a Confirm button. The guest isn't
+  // left without their booking: the AI recaps outlet, date, time and party size earlier
+  // in the thread, before handing off. This message is the confirmation, not the record.
+  //
+  // The 10-minute hold isn't new policy — Part 10 of both scripts already states it. This
+  // just puts it in front of the guest at the moment it actually matters to them.
+  if (kind === "reservation") {
+    return (
+      "We are delighted to confirm your reservation. Please note that we will hold your table for an additional 10 minutes from your scheduled arrival time.\n\n" +
+      "Thank you for choosing us. We look forward to serving you."
+    );
+  }
+
+  // Takeaway keeps the itemised form: a pickup order is a list of things to collect, so
+  // the guest genuinely needs it restated.
   // details is the ` · `-joined summary from order-detect.ts — split it back into one bulleted
   // line per field, with a blank line above/below the block. Empty details → a single space so
   // the header and closing line still read as one sentence.
@@ -19,9 +35,7 @@ function confirmationText(kind: string, details: string): string {
     ? details.trim().split(" · ").map((s) => `· ${s.trim()}`).join("\n")
     : "";
   const block = parts ? `\n\n${parts}\n\n` : " ";
-  return kind === "reservation"
-    ? `✅ Your reservation is confirmed!${block}We look forward to welcoming you — see you soon!`
-    : `✅ Your order is confirmed!${block}We'll have it ready — see you at pickup!`;
+  return `✅ Your order is confirmed!${block}We'll have it ready — see you at pickup!`;
 }
 
 export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: string }> }) {
