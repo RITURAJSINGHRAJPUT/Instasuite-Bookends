@@ -62,7 +62,12 @@ export function isTrivialAck(text: string): boolean {
 }
 
 export function cannedWelcome(businessName: string): string {
-  return `Hey there! 👋 Welcome to ${businessName} — are you looking to book a table or place a takeaway order?`;
+  // Opens with the brand's affirmation word, per the VOICE SIGNATURE block in the
+  // scripts. This reply never reaches the model — it is the no-AI answer to a bare
+  // "hi", which is the most common opener there is. Left as a plain greeting, the
+  // single most frequent "first reply of the conversation" would be the one place
+  // the signature never appeared.
+  return `Beshak! Welcome to ${businessName} 👋 How may I help you today — a table reservation, or a takeaway order?`;
 }
 
 type Turn = { role: "user" | "assistant"; content: string };
