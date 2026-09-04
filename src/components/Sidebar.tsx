@@ -23,6 +23,7 @@ import {
   Flag,
   CircleSlash,
   MessageSquareText,
+  UserX,
   ScrollText,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
@@ -83,6 +84,8 @@ const MAIN_NAV: NavItem[] = [
   { href: "/unavailable", label: "Unavailable", icon: CircleSlash, feature: "unavailable" },
   { href: "/scripts", label: "AI Scripts", icon: Bot, feature: "scripts" },
   { href: "/quick-replies", label: "Quick Replies", icon: MessageSquareText, feature: "quick_replies" },
+  // Every role has this one — blocking a spammer is an Inbox reflex, not an admin task.
+  { href: "/blocked", label: "Blocked", icon: UserX, feature: "blocked" },
 ];
 
 // The Settings section: the general Settings page is the section header, and these

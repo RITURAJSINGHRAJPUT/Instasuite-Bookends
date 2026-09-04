@@ -24,6 +24,7 @@ import {
   refersToPastOrder,
 } from "@/lib/order-detect";
 import { parseIncomingMedia, hasMedia, describeMedia, type Media } from "@/lib/attachments";
+import { isBlocked } from "@/lib/blocklist";
 
 // The reply is generated in after() (see below), and on Vercel that background
 // work is bounded by THIS function's maxDuration — exceed it and the reply is
@@ -162,6 +163,13 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     await touch(conversation.id);
 
+    // Do-not-reply list. Global: one entry silences this handle on EVERY connected
+    // account (see src/lib/blocklist.ts). Everything above has already run, so the
+    // message is stored and the Inbox shows it exactly as normal — we simply never
+    // answer. Sits above the mode check, and therefore above the canned-welcome path
+    // below, because a blocked guest's first "hi" must not get the welcome DM either.
+    if (await isBlocked(conversation.username)) return;
+
     if (conversation.mode === "human") return;
 
     // A bare emoji is not a question, wherever it lands in the thread. It used to
@@ -246,6 +254,10 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
       .maybeSingle();
     if (!conversation) return;
     if (conversation.mode === "human") return;
+    // Re-checked for the same reason mode is: the debounce window is 6 seconds wide,
+    // so staff can block this handle after the message landed but before we reply.
+    // Normally a cache hit, so it costs nothing.
+    if (await isBlocked(conversation.username)) return;
 
     const igsid = conversation.igsid;
 

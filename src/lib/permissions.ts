@@ -17,6 +17,7 @@ export const FEATURES = [
   "businesses",
   "scripts",
   "quick_replies",
+  "blocked",
   "settings",
   "admin",
   "users",
@@ -34,12 +35,17 @@ export type Role = "super_admin" | "admin" | "manager" | "agent" | "client";
 // own-scoped tenant.
 // `orders` tracks `overview`: it reads the same overview-gated analytics endpoint,
 // so its viewers must be a subset of overview's or they'd 404 on their own page.
+// `blocked` is the one feature EVERY role has: adding a spammer to the do-not-reply
+// list is a day-to-day Inbox reflex, and the person who notices is usually the agent
+// watching the Inbox, not an admin. Note the list is GLOBAL, so a `client` blocking a
+// handle also silences it on other tenants' accounts — audit_log records every write,
+// which is what keeps that accountable.
 export const ROLE_CAPABILITIES: Record<Role, Feature[]> = {
-  super_admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings", "admin", "users", "audit"],
-  admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings", "admin"],
-  manager: ["overview", "inbox", "orders", "review", "unavailable"],
-  agent: ["inbox"],
-  client: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "settings"],
+  super_admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "blocked", "settings", "admin", "users", "audit"],
+  admin: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "blocked", "settings", "admin"],
+  manager: ["overview", "inbox", "orders", "review", "unavailable", "blocked"],
+  agent: ["inbox", "blocked"],
+  client: ["overview", "inbox", "orders", "review", "unavailable", "businesses", "scripts", "quick_replies", "blocked", "settings"],
 };
 
 // Staff = roles that operate the OPERATOR's data (everyone except the legacy
@@ -72,6 +78,7 @@ export const FEATURE_ROUTE: Record<Feature, string> = {
   businesses: "/businesses",
   scripts: "/scripts",
   quick_replies: "/quick-replies",
+  blocked: "/blocked",
   settings: "/settings",
   admin: "/admin",
   users: "/users",
@@ -93,6 +100,9 @@ const LANDING_ORDER: Feature[] = [
   "admin",
   "users",
   "audit",
+  // Last on purpose: every role has `blocked`, so anywhere higher would make it the
+  // landing page for an agent, whose only other capability is `inbox`.
+  "blocked",
 ];
 
 export function firstAllowedRoute(role: string | null | undefined): string {

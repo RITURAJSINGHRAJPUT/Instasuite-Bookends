@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/supabase-server";
 import { resolveAccountByIgId } from "@/lib/tenant";
 import { sendAndStore } from "@/lib/outbound";
 import { feedbackSendAt, feedbackMessage } from "@/lib/feedback";
+import { isBlocked } from "@/lib/blocklist";
 
 // Post-dining feedback DMs. Sends the thank-you to CONFIRMED reservations whose send time (reservation
 // + 2h, capped at 11:55pm IST — see src/lib/feedback.ts) has passed. Best-effort: each row is attempted
@@ -28,6 +29,8 @@ type Row = {
   igsid: string | null;
   instagram_account_id: string | null;
   businesses: { public_handle: string | null } | { public_handle: string | null }[] | null;
+  // The GUEST's handle, for the do-not-reply check below — not the business's.
+  instagram_conversations: { username: string | null } | { username: string | null }[] | null;
 };
 
 function one<T>(v: T | T[] | null): T | null {
@@ -52,7 +55,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabaseAdmin
     .from("orders")
     .select(
-      "id, scheduled_at, conversation_id, igsid, instagram_account_id, businesses(public_handle)"
+      "id, scheduled_at, conversation_id, igsid, instagram_account_id, businesses(public_handle), instagram_conversations(username)"
     )
     .eq("kind", "reservation")
     .eq("status", "confirmed")
@@ -95,6 +98,20 @@ export async function POST(request: NextRequest) {
           .update({ feedback_sent_at: new Date().toISOString() })
           .eq("id", row.id);
         results.push({ order: row.id, ok: false, detail: "skipped: duplicate of same conversation" });
+        continue;
+      }
+
+      // This thank-you is fully automated, so the do-not-reply list applies to it the
+      // same way it applies to the webhook's AI replies. (Staff-triggered sends — the
+      // Inbox composer, order confirm/cancel, the collab decline — are deliberately NOT
+      // gated: those are a person choosing to write to someone.) Stamped done rather
+      // than skipped, so an unblock months later doesn't resurrect a stale thank-you.
+      if (await isBlocked(one(row.instagram_conversations)?.username ?? null)) {
+        await supabaseAdmin
+          .from("orders")
+          .update({ feedback_sent_at: new Date().toISOString() })
+          .eq("id", row.id);
+        results.push({ order: row.id, ok: false, detail: "skipped: blocked handle" });
         continue;
       }
 
