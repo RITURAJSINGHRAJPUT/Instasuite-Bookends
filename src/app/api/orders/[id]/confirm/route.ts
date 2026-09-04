@@ -117,6 +117,23 @@ export async function POST(_r: NextRequest, { params }: { params: Promise<{ id: 
     ? null
     : sent.error?.message || "Instagram rejected the message.";
 
+  // Hand the chat back to the AI. The webhook muted it at the recap precisely because
+  // this confirmation hadn't happened yet (see the `if (detected)` block there); now it
+  // has, so the reason for the silence is gone.
+  //
+  // The reason predicate is the whole safety of this: a thread that went to a human for
+  // an outage, a flagged review, an undelivered reply, or because staff answered from
+  // the Instagram app (processEcho, which leaves the reason null) must STAY with the
+  // human. Confirming an order on such a thread must not quietly re-arm the AI, so the
+  // update matches zero rows there instead.
+  if (order.conversation_id) {
+    await supabaseAdmin
+      .from("instagram_conversations")
+      .update({ mode: "agent", human_handoff_reason: null })
+      .eq("id", order.conversation_id)
+      .eq("human_handoff_reason", "awaiting_confirmation");
+  }
+
   // A guest who cancelled a reservation and then booked this instead never gets
   // a separate "please also click Cancel" step — confirming the replacement
   // auto-cancels whatever it superseded. Only fires when there's an actual open

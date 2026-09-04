@@ -99,6 +99,19 @@ export async function cancelOrderAndNotify(
       .eq("conversation_id", order.conversation_id)
       .eq("category", "cancellation")
       .eq("status", "pending");
+
+    // Give the chat back to the AI, same as the Confirm route does. The webhook muted it
+    // at the recap to wait on a human decision; cancelling IS that decision. Without this
+    // the guest is stranded — the order is gone and the AI stays silent forever, so the
+    // only way back is a staff member noticing and clicking "Give back to AI".
+    //
+    // Guarded on the reason so it can only ever un-silence what this feature silenced,
+    // never a thread a human took over for an outage, a review, or from their phone.
+    await supabaseAdmin
+      .from("instagram_conversations")
+      .update({ mode: "agent", human_handoff_reason: null })
+      .eq("id", order.conversation_id)
+      .eq("human_handoff_reason", "awaiting_confirmation");
   }
 
   return { ok: true, id: claimed.id, status: "cancelled", already: false };

@@ -435,9 +435,22 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
       // Fresh-start boundary: hide everything up to and including this confirmation from future AI
       // turns. Using the confirmation message's own DB timestamp (with the strict `>` filter above)
       // keeps the cut exact regardless of app-vs-DB clock skew. Covers reservations AND takeaways.
+      //
+      // The recap is also the AI's LAST word. Nothing exists yet — no human has approved this
+      // booking — so anything the model says next can only be filler or, worse, a promise it has
+      // no standing to make. It once answered a guest's "Perfect" with "We'll see you tomorrow
+      // evening", 99 seconds before staff actually confirmed. The script already forbade exactly
+      // that phrasing and the model said it anyway, which is why the stop lives here and not in
+      // the prompt. Everything after the recap — "ok", a question, a change of mind — is a
+      // person's to answer. Reversed by the Confirm and Cancel routes, which flip this same pair
+      // back (guarded on the reason, so they only ever un-silence what this line silenced).
       await supabaseAdmin
         .from("instagram_conversations")
-        .update({ context_reset_at: sent.lastCreatedAt ?? new Date().toISOString() })
+        .update({
+          context_reset_at: sent.lastCreatedAt ?? new Date().toISOString(),
+          mode: "human",
+          human_handoff_reason: "awaiting_confirmation",
+        })
         .eq("id", conversation.id);
     }
     if (detectedReview) await captureReview(account, conversation, detectedReview);

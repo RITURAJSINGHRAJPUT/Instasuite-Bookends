@@ -682,6 +682,22 @@ export default function AccountInbox({
                   </div>
                 )}
 
+              {/* The AI stopped ITSELF at the recap and is waiting on a human decision. Without
+                  this banner a deliberately silent thread is indistinguishable from a broken one —
+                  which is exactly how staff would come to mistrust the pause and turn it off.
+                  No dismiss button: the silence is real and lasts until the order is actioned, so
+                  hiding the notice would only hide the reason the chat has gone quiet. */}
+              {selected.mode === "human" &&
+                selected.human_handoff_reason === "awaiting_confirmation" && (
+                  <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--warn)]/25 bg-[var(--warn-soft)] px-4 py-2.5 text-[11px] font-bold text-[var(--warn)]">
+                    <AlertTriangle size={14} className="flex-shrink-0" />
+                    <span className="truncate">
+                      The AI has paused — this guest is waiting on your confirmation. Confirm the
+                      order to reply and hand the chat back to the AI.
+                    </span>
+                  </div>
+                )}
+
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
                 {loadingMessages && (
                   <div className="flex items-center justify-center py-6">
