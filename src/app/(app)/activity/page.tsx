@@ -25,6 +25,8 @@ const ACTION_LABEL: Record<string, string> = {
   "order.confirm": "Confirmed order",
   "order.cancel": "Cancelled order",
   "order.update": "Edited order",
+  "order.complete": "Marked order done",
+  "order.reopen": "Reopened order",
   "order.log_manual": "Logged order manually",
   "order.feedback_dm": "Sent feedback DM",
   "conversation.send": "Replied in chat",

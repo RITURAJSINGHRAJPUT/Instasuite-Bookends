@@ -50,8 +50,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!order.instagram_account_id || !ctx.accountIds.includes(order.instagram_account_id)) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  if (order.status === "cancelled") {
-    return Response.json({ error: "This order is cancelled and can't be edited." }, { status: 409 });
+  // Both terminal states are frozen. Editing a finished booking with notify:true would DM the
+  // guest "your reservation has been updated" about a meal they already ate; undo it from
+  // Orders first if a completed record genuinely needs correcting.
+  if (order.status === "cancelled" || order.status === "completed") {
+    const label = order.status === "cancelled" ? "cancelled" : "already marked done";
+    return Response.json({ error: `This order is ${label} and can't be edited.` }, { status: 409 });
   }
 
   const updates: Record<string, unknown> = {};

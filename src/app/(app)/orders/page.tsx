@@ -15,6 +15,8 @@ import {
   Loader2,
   Ban,
   Pencil,
+  CheckCheck,
+  Undo2,
 } from "lucide-react";
 
 // Real reservations + takeaway orders (the `orders` ledger), captured from the AI's handoff
@@ -28,18 +30,31 @@ type Order = {
   account_id: string | null;
   account_username: string | null;
   details: string;
-  status: "pending" | "confirmed" | "cancelled";
+  /**
+   * 'confirmed' = the guest was TOLD yes (a DM went out). 'completed' = it actually happened
+   * (silent, set by staff). The two are independent questions, which is why marking done is a
+   * separate action rather than a second meaning stacked onto Confirm.
+   */
+  status: "pending" | "confirmed" | "cancelled" | "completed";
   created_at: string;
   confirmed_at: string | null;
+  completed_at: string | null;
   scheduled_at: string | null;
   feedback_sent_at: string | null;
   /** A guest asked to cancel this in-conversation — flagged from the Review pipeline. */
   cancellationRequested: boolean;
 };
 
-type Range = "all" | "week" | "month" | "year";
-const RANGE_DAYS: Record<Exclude<Range, "all">, number> = { week: 7, month: 30, year: 365 };
-const RANGE_LABEL: Record<Range, string> = { all: "All", week: "Week", month: "Month", year: "Year" };
+type Range = "all" | "today" | "week" | "month" | "year";
+// "today" isn't a rolling window like the rest, so it has no entry here — see `scoped`.
+const RANGE_DAYS: Record<Exclude<Range, "all" | "today">, number> = { week: 7, month: 30, year: 365 };
+const RANGE_LABEL: Record<Range, string> = {
+  all: "All",
+  today: "Today",
+  week: "Week",
+  month: "Month",
+  year: "Year",
+};
 
 function relTime(iso: string): string {
   const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
@@ -82,6 +97,13 @@ function fromIstInput(v: string): string | null {
   return new Date(new Date(`${v}:00Z`).getTime() - IST_OFFSET_MS).toISOString();
 }
 
+// Midnight of `ts`'s IST calendar day, as a UTC epoch. The Today filter is a day on the
+// outlets' clock, not the operator's — a manager in another timezone still sees the same
+// list the kitchen does.
+function istDayStart(ts: number): number {
+  return Math.floor((ts + IST_OFFSET_MS) / 86_400_000) * 86_400_000 - IST_OFFSET_MS;
+}
+
 const acctLabel = (o: Order) => (o.account_username ? `@${o.account_username}` : "Account");
 
 export default function OrdersPage() {
@@ -113,6 +135,7 @@ function OrdersInner() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [canceling, setCanceling] = useState<string | null>(null);
+  const [completing, setCompleting] = useState<string | null>(null);
   const [sendingFeedback, setSendingFeedback] = useState<string | null>(null);
   const [feedbackErr, setFeedbackErr] = useState<{ id: string; msg: string } | null>(null);
 
@@ -345,6 +368,32 @@ function OrdersInner() {
     }
   }
 
+  // Mark done / undo. No confirmation step and no DM — unlike Confirm and Cancel, nothing
+  // leaves the building here, so a misclick is a click away from being fixed.
+  async function markDone(id: string, done: boolean) {
+    setCompleting(id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/orders/${id}/complete`, { method: done ? "POST" : "DELETE" });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        // The server decides what an undo reverts TO (confirmed if the guest was messaged,
+        // otherwise pending), so take the status off the response rather than guessing.
+        const next: Order["status"] = d?.status ?? (done ? "completed" : "confirmed");
+        const patch = { status: next, completed_at: done ? d?.completed_at ?? null : null };
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+        setSelected((sel) => (sel && sel.id === id ? { ...sel, ...patch } : sel));
+      } else {
+        setActionError(d?.error || "Couldn't update this order.");
+      }
+    } catch {
+      setActionError("Couldn't update this order.");
+    } finally {
+      setCompleting(null);
+      load();
+    }
+  }
+
   // Distinct accounts present in the data, for the filter dropdown.
   const accounts = useMemo(() => {
     const seen = new Map<string, string>();
@@ -353,7 +402,14 @@ function OrdersInner() {
   }, [orders]);
 
   const scoped = useMemo(() => {
-    const cutoff = range === "all" ? 0 : now - RANGE_DAYS[range] * 86_400_000;
+    // Week/Month/Year are rolling windows; Today is the IST calendar day, so an order taken
+    // this morning stays in Today's list all day instead of ageing out 24h after capture.
+    const cutoff =
+      range === "all"
+        ? 0
+        : range === "today"
+          ? istDayStart(now)
+          : now - RANGE_DAYS[range] * 86_400_000;
     return orders
       .filter((o) => account === "all" || o.account_id === account)
       .filter((o) => range === "all" || new Date(o.created_at).getTime() >= cutoff);
@@ -388,7 +444,7 @@ function OrdersInner() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-0.5">
-            {(["all", "week", "month", "year"] as Range[]).map((r) => (
+            {(["all", "today", "week", "month", "year"] as Range[]).map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
@@ -432,6 +488,8 @@ function OrdersInner() {
           confirming={confirming}
           onCancel={(o) => openOrder(o, "cancel")}
           canceling={canceling}
+          onDone={(o) => markDone(o.id, true)}
+          completing={completing}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
           feedbackErr={feedbackErr}
@@ -446,6 +504,8 @@ function OrdersInner() {
           confirming={confirming}
           onCancel={(o) => openOrder(o, "cancel")}
           canceling={canceling}
+          onDone={(o) => markDone(o.id, true)}
+          completing={completing}
           onFeedback={sendFeedback}
           sendingFeedback={sendingFeedback}
           feedbackErr={feedbackErr}
@@ -506,7 +566,7 @@ function OrdersInner() {
               <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
                 {selected.kind === "takeaway" ? "Order" : "Reservation"}
               </p>
-              {selected.status !== "cancelled" && !editing && (
+              {selected.status !== "cancelled" && selected.status !== "completed" && !editing && (
                 <button
                   onClick={() => startEdit(selected)}
                   className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
@@ -599,6 +659,27 @@ function OrdersInner() {
                   <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--danger)]">
                     <Ban size={14} /> Cancelled — the customer was messaged.
                   </span>
+                ) : selected.status === "completed" ? (
+                  // Done is undoable, unlike the other two endings — nothing was sent, so
+                  // there's nothing to contradict by putting it back.
+                  <>
+                    <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--text-3)]">
+                      <CheckCheck size={14} /> Completed
+                      {selected.completed_at ? ` · ${fullDate(selected.completed_at)}` : ""}
+                    </span>
+                    <button
+                      onClick={() => markDone(selected.id, false)}
+                      disabled={completing === selected.id}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)] disabled:opacity-40"
+                    >
+                      {completing === selected.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Undo2 size={14} />
+                      )}
+                      Reopen this order
+                    </button>
+                  </>
                 ) : pendingAction ? (
                   // Both actions DM the guest the instant they fire and can't be taken back,
                   // so each needs an explicit yes — especially cancelling something the guest
@@ -663,6 +744,18 @@ function OrdersInner() {
                       </button>
                     )}
                     <button
+                      onClick={() => markDone(selected.id, true)}
+                      disabled={completing === selected.id}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:border-[var(--ok)] hover:text-[var(--ok)] disabled:opacity-40"
+                    >
+                      {completing === selected.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <CheckCheck size={14} />
+                      )}
+                      Mark done — no message sent
+                    </button>
+                    <button
                       onClick={() => setPendingAction("cancel")}
                       className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--danger)]/30 px-4 py-2.5 text-sm font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
                     >
@@ -720,6 +813,8 @@ function Column({
   confirming,
   onCancel,
   canceling,
+  onDone,
+  completing,
   onFeedback,
   sendingFeedback,
   feedbackErr,
@@ -735,6 +830,9 @@ function Column({
   /** Same, for Cancel. */
   onCancel: (o: Order) => void;
   canceling: string | null;
+  /** Marks the order done outright — no acknowledgement step, because it messages nobody. */
+  onDone: (o: Order) => void;
+  completing: string | null;
   onFeedback: (id: string) => void;
   sendingFeedback: string | null;
   feedbackErr: { id: string; msg: string } | null;
@@ -783,7 +881,11 @@ function Column({
                   </span>
                 )}
 
-                {o.status === "confirmed" ? (
+                {o.status === "completed" ? (
+                  <span className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--text-3)]">
+                    <CheckCheck size={11} /> Completed
+                  </span>
+                ) : o.status === "confirmed" ? (
                   <span className="flex items-center gap-1 rounded-full bg-[var(--ok-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--ok)]">
                     <Check size={11} /> Confirmed
                   </span>
@@ -805,7 +907,25 @@ function Column({
                   </button>
                 )}
 
-                {o.status !== "cancelled" && (
+                {o.status === "confirmed" && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDone(o);
+                    }}
+                    disabled={completing === o.id}
+                    className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--ok)] hover:text-[var(--ok)] disabled:opacity-40"
+                  >
+                    {completing === o.id ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <CheckCheck size={11} />
+                    )}
+                    Mark done
+                  </button>
+                )}
+
+                {o.status !== "cancelled" && o.status !== "completed" && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

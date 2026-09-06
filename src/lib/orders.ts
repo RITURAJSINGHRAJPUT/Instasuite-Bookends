@@ -40,11 +40,16 @@ export async function cancelOrderAndNotify(
   // in production (confirmed then cancelled 8s apart, guest never asked). Staff must
   // explicitly acknowledge the guest was already told it's confirmed. The auto-cancel
   // of a superseded order in confirm/route.ts passes the flag deliberately.
-  if (order.status === "confirmed" && !opts.acknowledgeConfirmed) {
+  // 'completed' is included: cancelling something staff already marked as served sends the
+  // guest a cancellation DM for a meal they've eaten. The UI hides Cancel on those rows, but
+  // this is the actual lock — hiding a button has never been the enforcement here.
+  if ((order.status === "confirmed" || order.status === "completed") && !opts.acknowledgeConfirmed) {
     return {
       ok: false,
       error:
-        "This order is already confirmed — the guest has been told it's going ahead. Confirm you want to cancel it anyway.",
+        order.status === "completed"
+          ? "This order is already marked done — the guest was served. Confirm you want to cancel it anyway."
+          : "This order is already confirmed — the guest has been told it's going ahead. Confirm you want to cancel it anyway.",
       httpStatus: 409,
     };
   }

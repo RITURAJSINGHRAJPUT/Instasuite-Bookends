@@ -538,11 +538,13 @@ async function capturedOrderNote(conversationId: string): Promise<string> {
     if (!order) return "";
 
     const state =
-      order.status === "confirmed"
-        ? "Our team has ALREADY CONFIRMED this with the guest — refer to it as confirmed and never say the team will confirm it."
-        : order.status === "cancelled"
-          ? "This was CANCELLED. Do not treat it as active."
-          : "Our team has not confirmed this yet.";
+      order.status === "completed"
+        ? "This has ALREADY HAPPENED and is closed (the guest dined / collected). Never re-confirm it or ask about its details — if they now want something else, take it as a brand-new request."
+        : order.status === "confirmed"
+          ? "Our team has ALREADY CONFIRMED this with the guest — refer to it as confirmed and never say the team will confirm it."
+          : order.status === "cancelled"
+            ? "This was CANCELLED. Do not treat it as active."
+            : "Our team has not confirmed this yet.";
 
     return [
       "ALREADY CAPTURED IN THIS CONVERSATION — never ask the guest for any of these details again; you already have them:",

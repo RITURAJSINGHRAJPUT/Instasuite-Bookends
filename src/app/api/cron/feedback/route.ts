@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
       "id, scheduled_at, conversation_id, igsid, instagram_account_id, businesses(public_handle), instagram_conversations(username)"
     )
     .eq("kind", "reservation")
-    .eq("status", "confirmed")
+    // 'completed' too, not just 'confirmed' — a booking staff marked done is the one guest we
+    // know for certain actually dined. Keying on 'confirmed' alone would have silently dropped
+    // the thank-you for every table that got closed out before the 2h send window came round.
+    .in("status", ["confirmed", "completed"])
     .is("feedback_sent_at", null)
     .not("scheduled_at", "is", null)
     .gte("scheduled_at", since);
