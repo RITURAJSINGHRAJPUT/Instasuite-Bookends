@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   Receipt,
@@ -17,6 +18,7 @@ import {
   Pencil,
   CheckCheck,
   Undo2,
+  MessageSquare,
 } from "lucide-react";
 
 // Real reservations + takeaway orders (the `orders` ledger), captured from the AI's handoff
@@ -29,6 +31,12 @@ type Order = {
   customer_name: string | null;
   account_id: string | null;
   account_username: string | null;
+  /**
+   * The chat this order was captured from, for the "Open chat" link in the modal.
+   * Null when that conversation has since been deleted — the order survives it, so the
+   * link has to be conditional rather than assumed.
+   */
+  conversation_id: string | null;
   details: string;
   /**
    * 'confirmed' = the guest was TOLD yes (a DM went out). 'completed' = it actually happened
@@ -641,9 +649,20 @@ function OrdersInner() {
                 </div>
               </div>
             ) : (
-              <p className="mt-1 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
-                {selected.details || "No further detail captured."}
-              </p>
+              /* Name comes from `customer_name`, NOT from `details`. order-detect.ts keeps it
+                 out of the summary on purpose (it has its own column), and `details` is bulleted
+                 verbatim into the takeaway confirmation DM by confirmationText() — so writing the
+                 name in there would change what guests receive. Rendering it here instead also
+                 means every order already in the ledger gains the line, not just future ones. */
+              <div className="mt-1 rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+                <p>
+                  <span className="text-[var(--text-4)]">Name:</span>{" "}
+                  {selected.customer_name || "Guest"}
+                </p>
+                <p className="whitespace-pre-wrap">
+                  {selected.details || "No further detail captured."}
+                </p>
+              </div>
             )}
 
             {actionError && (
@@ -765,6 +784,21 @@ function OrdersInner() {
                   </>
                 )}
               </div>
+            )}
+
+            {/* Straight to the thread this order came from. A Link rather than router.push so
+                cmd/middle-click opens it in a new tab — staff often want the chat beside the
+                board, not instead of it. Hidden when the conversation has been deleted:
+                conversation_id is nullable and the order outlives the chat, so a link there
+                would land on an empty Inbox with no explanation. */}
+            {!editing && selected.conversation_id && (
+              <Link
+                href={`/inbox?conversation=${selected.conversation_id}`}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              >
+                <MessageSquare size={14} />
+                Open chat
+              </Link>
             )}
 
             {selected.kind === "reservation" && (

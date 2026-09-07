@@ -177,6 +177,7 @@ export default function AccountInbox({
   onChanged,
   showHeader,
   showContext,
+  focusConversationId,
 }: {
   account: ConnectedAccount;
   /** Already filtered to this account by the parent. */
@@ -190,6 +191,11 @@ export default function AccountInbox({
   showHeader: boolean;
   /** The profile/AI-context aside. No room for it in split mode. */
   showContext: boolean;
+  /**
+   * A conversation to open on arrival — the Orders page's "Open chat" link. Broadcast to
+   * every panel, so this one ignores it unless the conversation is actually its own.
+   */
+  focusConversationId?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -344,6 +350,24 @@ export default function AccountInbox({
   };
 
   const selected = conversations.find((c) => c.id === selectedId);
+
+  // Open the conversation a deep-link asked for (Orders -> "Open chat").
+  //
+  // The ref is what makes this safe to run on every render: it records the id this panel
+  // has ALREADY honoured, so once the user clicks away to another chat we don't drag them
+  // back on the next re-render — and there are many, since the parent refetches the whole
+  // conversation list on every Realtime event.
+  //
+  // `conversations` is in the deps because the list arrives after this component mounts:
+  // on a cold load the id is known before the chat it names exists here, and without the
+  // re-check the link would silently do nothing.
+  const honouredFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusConversationId || honouredFocusRef.current === focusConversationId) return;
+    if (!conversations.some((c) => c.id === focusConversationId)) return; // another panel's
+    honouredFocusRef.current = focusConversationId;
+    setSelectedId(focusConversationId);
+  }, [focusConversationId, conversations]);
 
   // Per-conversation message cache, so reopening a chat paints instantly instead of
   // waiting on the network again. A ref, not state: writing to it must never trigger

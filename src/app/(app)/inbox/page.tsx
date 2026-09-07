@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { AlertTriangle } from "lucide-react";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -19,7 +20,35 @@ import AccountInbox, { type ConnectedAccount } from "./AccountInbox";
 
 type ScriptRow = { id: string; name: string };
 
+// useSearchParams (to open the conversation named in ?conversation=, set by the Orders
+// page's "Open chat" link) opts the route out of static prerender unless it sits in a
+// Suspense boundary — so the page splits into a wrapper + this inner component. Same
+// shape as /scripts and /orders.
 export default function InboxPage() {
+  return (
+    <Suspense fallback={<p className="p-8 text-xs text-[var(--text-4)]">Loading…</p>}>
+      <InboxInner />
+    </Suspense>
+  );
+}
+
+function InboxInner() {
+  const params = useSearchParams();
+  const router = useRouter();
+
+  // The conversation to open on arrival, captured on the FIRST render and then consumed.
+  //
+  // A lazy useState initializer rather than an effect: it pins the value before the URL
+  // is cleared, so the panels are handed it no matter how the clear is scheduled, and the
+  // effect below is left with nothing to do but tidy the address bar.
+  //
+  // Clearing matters because otherwise a refresh would yank the selection back to the
+  // order's thread after the user had already moved on to a different chat.
+  const [focusId] = useState<string | null>(() => params.get("conversation"));
+  useEffect(() => {
+    if (focusId) router.replace("/inbox", { scroll: false });
+  }, [focusId, router]);
+
   // Session-aware client (reads the auth cookie), not a bare anon client. Realtime
   // enforces RLS per event and the policies are `to authenticated` keyed on
   // auth.uid() — an unauthenticated socket matches zero rows.
@@ -190,6 +219,9 @@ export default function InboxPage() {
                 onChanged={fetchConversations}
                 showHeader={splitView}
                 showContext={!splitView}
+                // Handed to every panel; only the one that actually owns this
+                // conversation acts on it.
+                focusConversationId={focusId}
               />
             </div>
           ))}
