@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
+import { isCakeOrder } from "@/lib/cake";
 import {
   Receipt,
   CalendarClock,
@@ -571,9 +572,17 @@ function OrdersInner() {
             )}
 
             <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
-                {selected.kind === "takeaway" ? "Order" : "Reservation"}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">
+                  {selected.kind === "takeaway" ? "Order" : "Reservation"}
+                </p>
+                {/* Mirrors the card badge, so opening an order never contradicts the list. */}
+                {selected.kind === "takeaway" && isCakeOrder(selected.details) && (
+                  <span className="flex items-center gap-1 rounded-full bg-[var(--warn-soft)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--warn)]">
+                    🎂 Cake
+                  </span>
+                )}
+              </div>
               {selected.status !== "cancelled" && selected.status !== "completed" && !editing && (
                 <button
                   onClick={() => startEdit(selected)}
@@ -912,6 +921,16 @@ function Column({
                 {o.cancellationRequested && (
                   <span className="flex items-center gap-1 rounded-full bg-[var(--warn-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--warn)]">
                     <AlertTriangle size={11} /> Cancel requested
+                  </span>
+                )}
+
+                {/* Cakes are advance orders — a day ahead, Surat only, pickup from 2 PM (script
+                    Part 25 / 23) — so they need handling nothing like a pizza due in twenty
+                    minutes, yet they look identical on this board. Takeaway only: a reservation
+                    that mentions a birthday cake is a different situation. */}
+                {o.kind === "takeaway" && isCakeOrder(o.details) && (
+                  <span className="flex items-center gap-1 rounded-full bg-[var(--warn-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--warn)]">
+                    🎂 Cake
                   </span>
                 )}
 
