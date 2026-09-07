@@ -23,7 +23,13 @@ import {
   dedupeKey,
   refersToPastOrder,
 } from "@/lib/order-detect";
-import { parseIncomingMedia, hasMedia, describeMedia, type Media } from "@/lib/attachments";
+import {
+  parseIncomingMedia,
+  hasMedia,
+  describeMedia,
+  isStoryMedia,
+  type Media,
+} from "@/lib/attachments";
 import { isBlocked } from "@/lib/blocklist";
 
 // The reply is generated in after() (see below), and on Vercel that background
@@ -172,16 +178,27 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     if (conversation.mode === "human") return;
 
+    // Story interactions are never answered — not a reply to our story, not a mention of
+    // us in someone else's. This used to be the opposite: media-bearing messages were
+    // routed to the AI on the theory that a 😍 against a story is real engagement. Five
+    // days of traffic said otherwise — 53 story events, 46 of them with no text at all,
+    // and of the 7 that had text, 4 were bare emoji. Three were real questions and none
+    // was a booking. So the old rule bought three content questions at the price of ~50
+    // AI calls into a dead end, and made the account look like it chats back at every
+    // sticker. Staff still see all of it in the Inbox and can answer by hand.
+    //
+    // Shared posts and reels are NOT covered (see isStoryMedia) — sending a reel into
+    // the DMs is a real conversational move and still gets a reply.
+    if (isStoryMedia(media)) return;
+
     // A bare emoji is not a question, wherever it lands in the thread. It used to
     // count as a "no intent opener", so a guest who opened with just 👋 got the whole
     // welcome message back — starting a conversation they never asked for. The message
     // is still stored above (history and the Inbox stay accurate); only the reply is
     // suppressed. "hi" / "hello" / "info?" still get the welcome. Placed before the
     // count query below so it costs no round trip either.
-    // ...but a 😍 sent AGAINST a story or a shared post is real engagement, not a
-    // stray reaction, so media-bearing messages fall through to the normal AI path.
-    // The script's social-message rule keeps that reply warm and free of any
-    // "reservation or takeaway?" push.
+    // A bare emoji carrying a shared post or reel still reaches the AI, which is why
+    // this stays conditional on `media` rather than testing the text alone.
     if (isPureEmoji(text) && !media.length) return;
 
     // Cost pre-filter — runs before anything that touches the paid AI. A bare
