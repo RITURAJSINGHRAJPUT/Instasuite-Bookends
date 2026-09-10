@@ -30,7 +30,12 @@ type ReviewItem = {
   status: "pending" | "completed" | "dismissed";
   created_at: string;
   completed_at: string | null;
-  conversation_id: string;
+  /**
+   * The chat this was captured from. NULLABLE since migration 0016 made the FK
+   * `on delete set null` — a review item outlives the conversation it came from, so the
+   * "Open in Inbox" link has to be conditional rather than assumed.
+   */
+  conversation_id: string | null;
 };
 
 const CAT_LABEL: Record<Category, string> = {
@@ -370,12 +375,18 @@ function ReviewInner() {
             )}
 
             <div className="mt-4 flex items-center gap-2">
-              <Link
-                href="/inbox"
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)]"
-              >
-                <MessagesSquare size={14} /> Open in Inbox
-              </Link>
+              {/* Straight to the thread. This used to be a bare "/inbox", which landed staff
+                  on an empty Inbox to hunt for the chat by hand — at exactly the moment a
+                  collab or complaint needed answering. Hidden when the chat has been
+                  deleted, rather than linking to ?conversation=null. */}
+              {selected.conversation_id && (
+                <Link
+                  href={`/inbox?conversation=${selected.conversation_id}`}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)]"
+                >
+                  <MessagesSquare size={14} /> Open in Inbox
+                </Link>
+              )}
               {selected.status === "pending" ? (
                 <>
                   {confirming !== selected.id && (
