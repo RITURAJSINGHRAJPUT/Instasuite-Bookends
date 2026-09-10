@@ -40,8 +40,8 @@ export default function Features() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]">
                 <f.icon size={18} strokeWidth={2.2} />
               </div>
-              <h3 className="mt-4 text-[15px] font-bold text-[var(--text-1)]">{f.title}</h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-3)]">{f.body}</p>
+              <h3 className="mt-4 text-[14px] font-bold text-[var(--text-1)]">{f.title}</h3>
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--text-3)]">{f.body}</p>
             </div>
           </Reveal>
         ))}

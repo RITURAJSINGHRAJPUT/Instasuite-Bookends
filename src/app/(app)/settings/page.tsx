@@ -53,7 +53,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-8">
       <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Settings</h1>
-      <p className="text-[13px] text-[var(--text-4)]">Your plan, usage and appearance.</p>
+      <p className="text-[12px] text-[var(--text-4)]">Your plan, usage and appearance.</p>
 
       {loading && <p className="mt-6 text-xs text-[var(--text-4)]">Loading…</p>}
 
@@ -61,11 +61,11 @@ export default function SettingsPage() {
       {usage && (
         <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">
+            <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">
               Usage since {new Date(usage.period_start).toLocaleDateString()}
             </h2>
             {plan && (
-              <span className="text-[11px] font-semibold text-[var(--text-4)]">
+              <span className="text-[10px] font-semibold text-[var(--text-4)]">
                 {plan.name} plan · {usage.subscription?.status}
               </span>
             )}
@@ -79,19 +79,19 @@ export default function SettingsPage() {
                   <span className="text-xs font-semibold text-[var(--text-4)]"> / {cap}</span>
                 )}
               </p>
-              <p className="text-[11px] text-[var(--text-4)]">AI replies</p>
+              <p className="text-[10px] text-[var(--text-4)]">AI replies</p>
             </div>
             <div>
               <p className="text-xl font-extrabold text-[var(--text-1)]">
                 ${(usage.totals.costCents / 100).toFixed(2)}
               </p>
-              <p className="text-[11px] text-[var(--text-4)]">AI cost</p>
+              <p className="text-[10px] text-[var(--text-4)]">AI cost</p>
             </div>
             <div>
               <p className="text-xl font-extrabold text-[var(--text-1)]">
                 {(usage.totals.inputTokens + usage.totals.outputTokens).toLocaleString()}
               </p>
-              <p className="text-[11px] text-[var(--text-4)]">tokens</p>
+              <p className="text-[10px] text-[var(--text-4)]">tokens</p>
             </div>
           </div>
 
@@ -108,7 +108,7 @@ export default function SettingsPage() {
                 />
               </div>
               {used >= cap && (
-                <p className="mt-2 text-[11px] font-semibold text-[var(--danger)]">
+                <p className="mt-2 text-[10px] font-semibold text-[var(--danger)]">
                   Monthly limit reached — auto-replies are paused until the period resets.
                 </p>
               )}
@@ -118,7 +118,7 @@ export default function SettingsPage() {
           {usage.by_account.length > 0 && (
             <div className="mt-4 space-y-1.5 border-t border-[var(--border)] pt-4">
               {usage.by_account.map((a) => (
-                <div key={a.username} className="flex items-center justify-between text-[11px]">
+                <div key={a.username} className="flex items-center justify-between text-[10px]">
                   <span className="text-[var(--text-4)]">@{a.username}</span>
                   <span className="font-semibold text-[var(--text-2)]">
                     {a.messages} replies · ${(a.cost_cents / 100).toFixed(2)}
@@ -133,11 +133,11 @@ export default function SettingsPage() {
       {/* Plan */}
       {plan && (
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">Plan</h2>
+          <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">Plan</h2>
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="text-[15px] font-bold text-[var(--text-1)]">{plan.name}</p>
-              <p className="text-[11px] text-[var(--text-4)]">
+              <p className="text-[14px] font-bold text-[var(--text-1)]">{plan.name}</p>
+              <p className="text-[10px] text-[var(--text-4)]">
                 {plan.max_ig_accounts} Instagram account{plan.max_ig_accounts === 1 ? "" : "s"} ·{" "}
                 {cap === null ? "unlimited replies" : `${cap.toLocaleString()} replies / month`}
               </p>
@@ -151,7 +151,7 @@ export default function SettingsPage() {
           </div>
           {/* Deliberately no "Upgrade" button: there is no billing flow to send
               anyone to, so it would be a dead end. */}
-          <p className="mt-3 border-t border-[var(--border)] pt-3 text-[11px] text-[var(--text-5)]">
+          <p className="mt-3 border-t border-[var(--border)] pt-3 text-[10px] text-[var(--text-5)]">
             To change plan, reply to your onboarding email — we move accounts over manually.
           </p>
         </div>
@@ -159,7 +159,7 @@ export default function SettingsPage() {
 
       {/* Appearance */}
       <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
-        <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">
+        <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">
           Appearance
         </h2>
         <div className="mt-3 flex gap-2">
@@ -174,7 +174,7 @@ export default function SettingsPage() {
               <button
                 key={key}
                 onClick={() => setTheme(key)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-[13px] font-bold transition-colors ${
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-[12px] font-bold transition-colors ${
                   active
                     ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                     : "border-[var(--border-strong)] text-[var(--text-3)] hover:bg-[var(--surface-1)]"
@@ -188,7 +188,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <p className="mt-4 text-[12px] text-[var(--text-4)]">
+      <p className="mt-4 text-[11px] text-[var(--text-4)]">
         Looking for your businesses and Instagram accounts?{" "}
         <Link href="/businesses" className="font-semibold text-[var(--accent)] underline">
           They moved to Businesses →

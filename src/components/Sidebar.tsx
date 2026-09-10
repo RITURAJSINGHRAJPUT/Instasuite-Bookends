@@ -123,7 +123,7 @@ function NavRow({
       href={item.href}
       aria-current={active ? "page" : undefined}
       title={isCollapsed ? item.label : undefined}
-      className={`group relative mb-0.5 flex items-center rounded-lg text-[13px] font-semibold transition-colors ${
+      className={`group relative mb-0.5 flex items-center rounded-lg text-[12px] font-semibold transition-colors ${
         isCollapsed
           ? "justify-center px-0 py-2.5"
           : indented
@@ -157,7 +157,7 @@ function NavRow({
       {isCollapsed && (
         <span
           role="tooltip"
-          className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--accent-fg)] opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block"
+          className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-semibold text-[var(--accent-fg)] opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block"
           style={{ background: "var(--text-1)" }}
         >
           {item.label}
@@ -361,7 +361,7 @@ export default function Sidebar() {
             <LogoMark size="sm" />
             <span
               role="tooltip"
-              className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--accent-fg)] opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block"
+              className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-semibold text-[var(--accent-fg)] opacity-0 shadow-md transition-opacity group-hover:opacity-100 md:block"
               style={{ background: "var(--text-1)" }}
             >
               Expand sidebar
@@ -414,7 +414,7 @@ export default function Sidebar() {
               <button
                 onClick={() => setSettingsOpen((o) => !o)}
                 aria-expanded={settingsOpen}
-                className={`mb-0.5 mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${
+                className={`mb-0.5 mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold transition-colors ${
                   sectionActive && !settingsOpen
                     ? "bg-[var(--accent-soft)] text-[var(--accent)]"
                     : "text-[var(--text-4)] hover:bg-[var(--surface-1)] hover:text-[var(--text-2)]"
@@ -450,7 +450,7 @@ export default function Sidebar() {
         >
           <span
             aria-hidden="true"
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold uppercase text-[var(--accent-fg)]"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold uppercase text-[var(--accent-fg)]"
             style={{ background: "var(--accent)" }}
           >
             {initial}
@@ -460,7 +460,7 @@ export default function Sidebar() {
               <span className="min-w-0 flex-1 text-left">
                 {/* No display name exists — profiles stores email and role only —
                     so the email IS the identity here. */}
-                <span className="block truncate text-[12px] font-bold text-[var(--text-1)]">
+                <span className="block truncate text-[11px] font-bold text-[var(--text-1)]">
                   {email}
                 </span>
                 <span className="block truncate text-[10px] text-[var(--text-4)]">
@@ -488,7 +488,7 @@ export default function Sidebar() {
               style={{ background: "var(--modal-bg)" }}
             >
               <div className="border-b border-[var(--border)] px-3 py-2.5">
-                <p className="truncate text-[12px] font-bold text-[var(--text-1)]">{email}</p>
+                <p className="truncate text-[11px] font-bold text-[var(--text-1)]">{email}</p>
                 <p className="truncate text-[10px] text-[var(--text-4)]">{roleLabel}</p>
               </div>
 
@@ -499,7 +499,7 @@ export default function Sidebar() {
                   className="block border-b border-[var(--border)] px-3 py-2.5 transition-colors hover:bg-[var(--surface-1)]"
                 >
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-[12px] font-bold text-[var(--text-1)]">
+                    <span className="truncate text-[11px] font-bold text-[var(--text-1)]">
                       {planName}
                     </span>
                     <span className="flex-shrink-0 text-[10px] text-[var(--text-4)]">
@@ -523,7 +523,7 @@ export default function Sidebar() {
               <button
                 role="menuitem"
                 onClick={toggleTheme}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-[12px] font-semibold text-[var(--text-2)] transition-colors hover:bg-[var(--surface-1)]"
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-[11px] font-semibold text-[var(--text-2)] transition-colors hover:bg-[var(--surface-1)]"
               >
                 {dark ? <Sun size={14} /> : <Moon size={14} />}
                 {dark ? "Light mode" : "Dark mode"}
@@ -532,7 +532,7 @@ export default function Sidebar() {
               <button
                 role="menuitem"
                 onClick={handleLogout}
-                className="flex w-full items-center gap-2.5 border-t border-[var(--border)] px-3 py-2.5 text-[12px] font-semibold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
+                className="flex w-full items-center gap-2.5 border-t border-[var(--border)] px-3 py-2.5 text-[11px] font-semibold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
               >
                 <LogOut size={14} />
                 Log out

@@ -160,8 +160,8 @@ export default function AdminPage() {
                   <p className="text-sm font-medium text-[var(--text-1)] truncate">
                     {l.name} {l.instagram_handle && <span className="text-[var(--text-4)]">· @{l.instagram_handle}</span>}
                   </p>
-                  <p className="text-[11px] text-[var(--text-4)] truncate">{l.email}</p>
-                  {l.message && <p className="mt-1 text-[11px] text-[var(--text-5)]">{l.message}</p>}
+                  <p className="text-[10px] text-[var(--text-4)] truncate">{l.email}</p>
+                  {l.message && <p className="mt-1 text-[10px] text-[var(--text-5)]">{l.message}</p>}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium uppercase ${badge(l.status === "converted" ? "approved" : l.status === "rejected" ? "rejected" : "pending")}`}>
@@ -170,7 +170,7 @@ export default function AdminPage() {
                   <select
                     value={l.status}
                     onChange={(e) => setLeadStatus(l.id, e.target.value)}
-                    className="rounded border border-[var(--border-strong)] bg-[var(--surface-1)] px-1.5 py-1 text-[11px] text-[var(--text-2)] focus:outline-none"
+                    className="rounded border border-[var(--border-strong)] bg-[var(--surface-1)] px-1.5 py-1 text-[10px] text-[var(--text-2)] focus:outline-none"
                   >
                     <option value="new">new</option>
                     <option value="contacted">contacted</option>
@@ -194,17 +194,17 @@ export default function AdminPage() {
                 <p className="text-lg font-semibold text-[var(--text-1)]">
                   ${(usage.total_cost_cents / 100).toFixed(2)}
                 </p>
-                <p className="text-[11px] text-[var(--text-4)]">what you owe Anthropic</p>
+                <p className="text-[10px] text-[var(--text-4)]">what you owe Anthropic</p>
               </div>
               <div>
                 <p className="text-lg font-semibold text-[var(--text-1)]">{usage.total_messages}</p>
-                <p className="text-[11px] text-[var(--text-4)]">AI replies</p>
+                <p className="text-[10px] text-[var(--text-4)]">AI replies</p>
               </div>
             </div>
             {usage.clients.length > 0 && (
               <div className="mt-3 space-y-1 border-t border-[var(--border)] pt-3">
                 {usage.clients.map((c) => (
-                  <div key={c.email} className="flex items-center justify-between text-[11px]">
+                  <div key={c.email} className="flex items-center justify-between text-[10px]">
                     <span className="text-[var(--text-4)] truncate">{c.email}</span>
                     <span className="text-[var(--text-2)] flex-shrink-0">
                       {c.messages} replies · ${(c.cost_cents / 100).toFixed(2)}
@@ -223,7 +223,7 @@ export default function AdminPage() {
             <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-medium text-[var(--text-1)] flex-1 min-w-0 truncate">{p.name}</span>
-                <label className="flex items-center gap-1 text-[11px] text-[var(--text-4)]">
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-4)]">
                   accounts
                   <input
                     type="number"
@@ -232,7 +232,7 @@ export default function AdminPage() {
                     className="w-16 rounded border border-[var(--border-strong)] bg-[var(--surface-1)] px-1.5 py-1 text-[var(--text-1)] focus:outline-none"
                   />
                 </label>
-                <label className="flex items-center gap-1 text-[11px] text-[var(--text-4)]">
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-4)]">
                   msgs/mo
                   <input
                     type="number"
@@ -242,7 +242,7 @@ export default function AdminPage() {
                     className="w-20 rounded border border-[var(--border-strong)] bg-[var(--surface-1)] px-1.5 py-1 text-[var(--text-1)] focus:outline-none"
                   />
                 </label>
-                <label className="flex items-center gap-1 text-[11px] text-[var(--text-4)]">
+                <label className="flex items-center gap-1 text-[10px] text-[var(--text-4)]">
                   $/mo
                   <input
                     type="number"
@@ -267,17 +267,17 @@ export default function AdminPage() {
             <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--text-1)] truncate">{b.name}</p>
-                <p className="text-[11px] text-[var(--text-4)] truncate">{b.profiles?.email}</p>
+                <p className="text-[10px] text-[var(--text-4)] truncate">{b.profiles?.email}</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium uppercase ${badge(b.status)}`}>{b.status}</span>
                 {b.status !== "approved" && (
-                  <button onClick={() => setStatus("businesses", b.id, "approved")} className="rounded-lg bg-emerald-500/90 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500">
+                  <button onClick={() => setStatus("businesses", b.id, "approved")} className="rounded-lg bg-emerald-500/90 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-emerald-500">
                     Approve
                   </button>
                 )}
                 {b.status !== "rejected" && (
-                  <button onClick={() => setStatus("businesses", b.id, "rejected")} className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-[var(--text-4)] hover:text-red-400 hover:bg-red-500/10">
+                  <button onClick={() => setStatus("businesses", b.id, "rejected")} className="rounded-lg px-2.5 py-1 text-[10px] font-medium text-[var(--text-4)] hover:text-red-400 hover:bg-red-500/10">
                     Reject
                   </button>
                 )}
@@ -296,7 +296,7 @@ export default function AdminPage() {
                 <p className="text-sm font-medium text-[var(--text-1)] truncate">
                   {a.username ? `@${a.username}` : a.ig_account_id}
                 </p>
-                <p className="text-[11px] text-[var(--text-4)] truncate">
+                <p className="text-[10px] text-[var(--text-4)] truncate">
                   {a.businesses?.name} · {a.businesses?.profiles?.email}
                 </p>
                 <p className={`text-[10px] ${tokenAge(a.token_expires_at).cls}`}>
@@ -306,12 +306,12 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium uppercase ${badge(a.status)}`}>{a.status}</span>
                 {a.status !== "approved" && (
-                  <button onClick={() => setStatus("accounts", a.id, "approved")} className="rounded-lg bg-emerald-500/90 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500">
+                  <button onClick={() => setStatus("accounts", a.id, "approved")} className="rounded-lg bg-emerald-500/90 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-emerald-500">
                     Approve
                   </button>
                 )}
                 {a.status !== "disabled" && (
-                  <button onClick={() => setStatus("accounts", a.id, "disabled")} className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-[var(--text-4)] hover:text-red-400 hover:bg-red-500/10">
+                  <button onClick={() => setStatus("accounts", a.id, "disabled")} className="rounded-lg px-2.5 py-1 text-[10px] font-medium text-[var(--text-4)] hover:text-red-400 hover:bg-red-500/10">
                     Disable
                   </button>
                 )}

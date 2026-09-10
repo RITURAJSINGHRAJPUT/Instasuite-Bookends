@@ -10,7 +10,7 @@ export default function Nav() {
           <span className="text-sm font-bold tracking-tight text-[var(--text-1)]">Instasuite</span>
         </a>
 
-        <nav className="hidden items-center gap-6 text-[13px] font-semibold text-[var(--text-3)] md:flex">
+        <nav className="hidden items-center gap-6 text-[12px] font-semibold text-[var(--text-3)] md:flex">
           <a href="#how-it-works" className="transition-colors hover:text-[var(--text-1)]">
             How it works
           </a>
@@ -25,13 +25,13 @@ export default function Nav() {
         <div className="flex items-center gap-4">
           <Link
             href="/login"
-            className="hidden text-[13px] font-semibold text-[var(--text-4)] transition-colors hover:text-[var(--text-2)] sm:inline"
+            className="hidden text-[12px] font-semibold text-[var(--text-4)] transition-colors hover:text-[var(--text-2)] sm:inline"
           >
             Sign in
           </Link>
           <a
             href="#request-access"
-            className="rounded-xl bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
+            className="rounded-xl bg-[var(--accent)] px-4 py-2 text-[12px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
           >
             Request access
           </a>

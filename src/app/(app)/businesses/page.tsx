@@ -44,6 +44,8 @@ type Business = {
   status: string;
   default_script_id: string | null;
   public_handle: string | null;
+  /** False for a dine-in-only brand (Beshak). Enforced in the webhook, not just the prompt. */
+  takeaway_enabled: boolean;
   instagram_accounts: Account[];
   outlets: Outlet[];
 };
@@ -192,6 +194,25 @@ function BusinessesInner() {
     load();
   }
 
+  // Optimistic: the row flips at once and `load()` reconciles. A checkbox that waits on a
+  // round trip before moving feels broken, and a failure re-renders the true value anyway.
+  async function setTakeaway(businessId: string, enabled: boolean) {
+    setBusinesses((prev) =>
+      prev.map((b) => (b.id === businessId ? { ...b, takeaway_enabled: enabled } : b))
+    );
+    setError(null);
+    const res = await fetch(`/api/businesses/${businessId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ takeaway_enabled: enabled }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data?.error || "Couldn't change takeaway for this brand.");
+    }
+    load();
+  }
+
   async function deleteBusiness(id: string) {
     if (deleting) return;
     setDeleting(true);
@@ -238,19 +259,19 @@ function BusinessesInner() {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-8">
       <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Businesses</h1>
-      <p className="text-[13px] text-[var(--text-4)]">
+      <p className="text-[12px] text-[var(--text-4)]">
         Each business holds its own Instagram accounts and script.
       </p>
 
       {(error || igError) && (
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error || igError}
         </p>
       )}
 
       {igConnected && (
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--ok)]/25 bg-[var(--ok-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--ok)]">
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--ok)]/25 bg-[var(--ok-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--ok)]">
           <Check size={13} className="mt-px flex-shrink-0" />
           Connected @{igConnected}. It goes live once an admin approves it.
         </p>
@@ -259,7 +280,7 @@ function BusinessesInner() {
       {/* Connected but not subscribed = the account looks fine and never gets a
           DM. Loud, not silent. */}
       {igWarning && (
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--warn)]/25 bg-[var(--warn-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--warn)]">
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--warn)]/25 bg-[var(--warn-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--warn)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {igWarning}
         </p>
@@ -272,7 +293,7 @@ function BusinessesInner() {
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && createBusiness()}
           placeholder="New business name"
-          className="flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--panel-bg)] px-4 py-2.5 text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm"
+          className="flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--panel-bg)] px-4 py-2.5 text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm"
         />
         <button
           onClick={createBusiness}
@@ -289,8 +310,8 @@ function BusinessesInner() {
       {!loading && businesses.length === 0 && (
         <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] py-12 text-center">
           <Building2 size={22} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-3 text-[13px] font-bold text-[var(--text-1)]">No businesses yet</p>
-          <p className="mt-1 text-[12px] text-[var(--text-4)]">
+          <p className="mt-3 text-[12px] font-bold text-[var(--text-1)]">No businesses yet</p>
+          <p className="mt-1 text-[11px] text-[var(--text-4)]">
             Add one above — a default script is created with it.
           </p>
         </div>
@@ -312,7 +333,7 @@ function BusinessesInner() {
                       }}
                       autoFocus
                       aria-label="Business name"
-                      className="min-w-0 rounded-md border border-[var(--border-strong)] bg-[var(--surface-1)] px-2 py-1 text-[15px] font-bold text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                      className="min-w-0 rounded-md border border-[var(--border-strong)] bg-[var(--surface-1)] px-2 py-1 text-[14px] font-bold text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
                     />
                     <button onClick={() => renameBusiness(b.id)} aria-label="Save name" className="text-[var(--ok)] hover:opacity-80">
                       <Check size={15} />
@@ -323,7 +344,7 @@ function BusinessesInner() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5">
-                    <h2 className="truncate text-[15px] font-bold text-[var(--text-1)]">{b.name}</h2>
+                    <h2 className="truncate text-[14px] font-bold text-[var(--text-1)]">{b.name}</h2>
                     <button
                       onClick={() => {
                         setEditingName(b.id);
@@ -336,7 +357,7 @@ function BusinessesInner() {
                     </button>
                   </div>
                 )}
-                <p className="text-[11px] text-[var(--text-4)]">
+                <p className="text-[10px] text-[var(--text-4)]">
                   {b.instagram_accounts?.length ?? 0} Instagram account
                   {(b.instagram_accounts?.length ?? 0) === 1 ? "" : "s"}
                 </p>
@@ -350,7 +371,7 @@ function BusinessesInner() {
                 {b.default_script_id && (
                   <Link
                     href={`/scripts?script=${b.default_script_id}`}
-                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-1)]"
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-1)]"
                   >
                     <FileText size={12} />
                     Edit script
@@ -359,7 +380,7 @@ function BusinessesInner() {
                 <button
                   onClick={() => setDeleteFor(b)}
                   aria-label={`Delete ${b.name}`}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-4)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-[var(--text-4)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                 >
                   <Trash2 size={12} />
                   Delete
@@ -371,7 +392,7 @@ function BusinessesInner() {
               {(b.instagram_accounts ?? []).map((a) => (
                 <div key={a.id} className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-[var(--text-2)]">
+                    <p className="truncate text-[12px] font-semibold text-[var(--text-2)]">
                       {a.username ? `@${a.username}` : a.ig_account_id}
                     </p>
                     <p className="text-[10px] text-[var(--text-5)]">
@@ -386,13 +407,13 @@ function BusinessesInner() {
                     </span>
                     <button
                       onClick={() => setScript(a.id, a.script_id ? null : b.default_script_id)}
-                      className="text-[11px] font-semibold text-[var(--text-4)] hover:text-[var(--text-2)]"
+                      className="text-[10px] font-semibold text-[var(--text-4)] hover:text-[var(--text-2)]"
                     >
                       {a.script_id ? "Use default" : "Detach"}
                     </button>
                     <button
                       onClick={() => disconnect(a.id)}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-[var(--text-4)] hover:text-[var(--danger)]"
+                      className="flex items-center gap-1 text-[10px] font-semibold text-[var(--text-4)] hover:text-[var(--danger)]"
                     >
                       <Unlink size={11} />
                       Disconnect
@@ -418,7 +439,7 @@ function BusinessesInner() {
                       setConnectFor(b.id);
                       setToken("");
                     }}
-                    className="text-[11px] font-semibold text-[var(--text-5)] hover:text-[var(--text-3)]"
+                    className="text-[10px] font-semibold text-[var(--text-5)] hover:text-[var(--text-3)]"
                   >
                     or paste a token
                   </button>
@@ -460,14 +481,14 @@ function BusinessesInner() {
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <div className="mb-2 flex items-center gap-1.5">
                 <Store size={13} className="text-[var(--text-4)]" />
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">Outlets</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">Outlets</p>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
                 {(b.outlets ?? []).map((o) => (
                   <span
                     key={o.id}
-                    className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-2)]"
+                    className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-1)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-2)]"
                   >
                     {o.name}
                     <button
@@ -480,7 +501,7 @@ function BusinessesInner() {
                   </span>
                 ))}
                 {(b.outlets?.length ?? 0) === 0 && (
-                  <span className="text-[11px] text-[var(--text-5)]">No outlets yet.</span>
+                  <span className="text-[10px] text-[var(--text-5)]">No outlets yet.</span>
                 )}
               </div>
 
@@ -507,7 +528,7 @@ function BusinessesInner() {
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <div className="mb-2 flex items-center gap-1.5">
                 <AtSign size={13} className="text-[var(--text-4)]" />
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">
                   Feedback handle
                 </p>
               </div>
@@ -527,9 +548,32 @@ function BusinessesInner() {
                   Save
                 </button>
               </div>
-              <p className="mt-1 text-[11px] text-[var(--text-5)]">
+              <p className="mt-1 text-[10px] text-[var(--text-5)]">
                 Tagged in the thank-you DM sent after a reservation.
               </p>
+            </div>
+
+            {/* Whether this brand takes takeaway at all. Not cosmetic: the agent is told in its
+                prompt AND the webhook refuses to record a takeaway order while this is off. */}
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={b.takeaway_enabled}
+                  onChange={(e) => setTakeaway(b.id, e.target.checked)}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--accent)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-bold text-[var(--text-1)]">
+                    Takes takeaway orders
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-relaxed text-[var(--text-5)]">
+                    {b.takeaway_enabled
+                      ? "The agent may offer and record pickup orders for this brand."
+                      : "Dine-in only — the agent offers a table instead, and any takeaway order it tries to record is refused."}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
         ))}
@@ -549,10 +593,10 @@ function BusinessesInner() {
                 <Trash2 size={16} className="text-[var(--danger)]" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-[15px] font-bold text-[var(--text-1)]">
+                <h3 className="text-[14px] font-bold text-[var(--text-1)]">
                   Delete {deleteFor.name}?
                 </h3>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--text-3)]">
+                <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--text-3)]">
                   This permanently removes the brand and everything under it — its connected Instagram
                   account{(deleteFor.instagram_accounts?.length ?? 0) === 1 ? "" : "s"}, all conversations,
                   orders and reviews, its script, and its outlets. This can&apos;t be undone.
@@ -563,14 +607,14 @@ function BusinessesInner() {
               <button
                 onClick={() => setDeleteFor(null)}
                 disabled={deleting}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
+                className="rounded-lg px-3.5 py-2 text-[12px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 onClick={() => deleteBusiness(deleteFor.id)}
                 disabled={deleting}
-                className="flex items-center gap-1.5 rounded-lg bg-[var(--danger)] px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-lg bg-[var(--danger)] px-4 py-2 text-[12px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                 Delete brand

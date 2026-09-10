@@ -38,8 +38,8 @@ export default function HowItWorks() {
               <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">
                 Step {i + 1}
               </p>
-              <h3 className="mt-1 text-[15px] font-bold text-[var(--text-1)]">{step.title}</h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-3)]">{step.body}</p>
+              <h3 className="mt-1 text-[14px] font-bold text-[var(--text-1)]">{step.title}</h3>
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--text-3)]">{step.body}</p>
             </div>
           </Reveal>
         ))}

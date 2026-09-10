@@ -61,13 +61,35 @@ export function isTrivialAck(text: string): boolean {
   return TRIVIAL_ACKS.has(text.trim().toLowerCase());
 }
 
-export function cannedWelcome(businessName: string): string {
+// The group's affirmation word, from the VOICE SIGNATURE block in the Capiche and Aiko
+// scripts. It doubles as the name of the sister restaurant, which is why it has to be
+// suppressed on that brand's own account — see below.
+const SIGNATURE_WORD = "Beshak";
+
+export function cannedWelcome(businessName: string, takeawayEnabled: boolean): string {
   // Opens with the brand's affirmation word, per the VOICE SIGNATURE block in the
   // scripts. This reply never reaches the model — it is the no-AI answer to a bare
-  // "hi", which is the most common opener there is. Left as a plain greeting, the
-  // single most frequent "first reply of the conversation" would be the one place
-  // the signature never appeared.
-  return `Beshak! Welcome to ${businessName} 👋 How may I help you today — a table reservation, or a takeaway order?`;
+  // "hi", which is the most common opener there is (a quarter of all conversations).
+  // Left as a plain greeting, the single most frequent "first reply of the
+  // conversation" would be the one place the signature never appeared.
+  //
+  // ...except where the brand's own name IS the signature word. "Beshak! Welcome to
+  // Beshak" reads as a stutter, and the point of the signature is that the word carries
+  // the brand — which the name is already doing. Compared rather than hardcoded to one
+  // tenant, because the collision is the actual rule: whenever these two are the same
+  // string, the prefix adds nothing.
+  const isOwnBrand = businessName.trim().toLowerCase() === SIGNATURE_WORD.toLowerCase();
+  const opener = isOwnBrand ? "" : `${SIGNATURE_WORD}! `;
+
+  // The offer has to match what the brand actually does. This line used to promise
+  // takeaway for EVERY tenant, so Beshak — dine-in only — advertised a service it does
+  // not run, one second in and without ever consulting its script, then had to
+  // contradict itself when the guest took it up.
+  const offer = takeawayEnabled
+    ? "How may I help you today — a table reservation, or a takeaway order?"
+    : "Would you like to book a table?";
+
+  return `${opener}Welcome to ${businessName} 👋 ${offer}`;
 }
 
 type Turn = { role: "user" | "assistant"; content: string };

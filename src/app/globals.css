@@ -136,6 +136,31 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* The type scale, one pixel down from Tailwind's stock values.
+
+   Separate from the `@theme inline` above on purpose — `inline` exists so the colour
+   utilities resolve through the :root vars, and these are plain literals that want no
+   part of that indirection.
+
+   Each size carries its ORIGINAL absolute line-height rather than v4's default ratio, so
+   only the glyph shrinks and the vertical rhythm is untouched. Drop a `--text-*--line-height`
+   and Tailwind recomputes that pair, which moves layout a great deal more than 1px.
+
+   Nothing to do with --text-1..6 in :root above: those are text COLOURS that happen to
+   share the prefix. Grep carefully in here. */
+@theme {
+  --text-xs: 11px;   --text-xs--line-height: 16px;   /* was 12px */
+  --text-sm: 13px;   --text-sm--line-height: 20px;   /* was 14px */
+  --text-base: 15px; --text-base--line-height: 24px; /* was 16px — but see the input
+                        classes in src/app: form fields pin 16px against iOS auto-zoom */
+  --text-lg: 17px;   --text-lg--line-height: 28px;   /* was 18px */
+  --text-xl: 19px;   --text-xl--line-height: 28px;   /* was 20px */
+  --text-2xl: 23px;  --text-2xl--line-height: 32px;  /* was 24px */
+  --text-3xl: 29px;  --text-3xl--line-height: 36px;  /* was 30px */
+  --text-4xl: 35px;  --text-4xl--line-height: 40px;  /* was 36px */
+  --text-5xl: 47px;  --text-5xl--line-height: 1;     /* was 48px */
+}
+
 /* No font-family override here: it previously hardcoded Arial, which beat the
    loaded font everywhere a page root forgot `font-sans` (the legal pages did). */
 body {

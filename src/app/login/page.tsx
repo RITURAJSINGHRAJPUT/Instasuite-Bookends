@@ -108,7 +108,7 @@ export default function LoginPage() {
             autoFocus
             autoComplete="email"
             placeholder="you@example.com"
-            className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+            className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
           />
 
           <label className="mb-2 mt-4 block text-xs font-medium text-[var(--text-4)]">Password</label>
@@ -118,7 +118,7 @@ export default function LoginPage() {
             ref={passwordRef}
             autoComplete="current-password"
             placeholder="Your password"
-            className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+            className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
           />
 
           {error && <p className="mt-3 text-xs text-[var(--danger)]">{error}</p>}

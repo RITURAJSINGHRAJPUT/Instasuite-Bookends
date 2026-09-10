@@ -27,7 +27,7 @@ export default function BuiltForRestaurants() {
         <h2 className="text-2xl font-extrabold tracking-tight text-[var(--text-1)] md:text-3xl">
           Built for restaurants and hospitality
         </h2>
-        <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-[var(--text-3)]">
+        <p className="mt-3 max-w-xl text-[12.5px] leading-relaxed text-[var(--text-3)]">
           However your restaurant operates, Instasuite fits the way you actually take orders and
           bookings.
         </p>
@@ -41,8 +41,8 @@ export default function BuiltForRestaurants() {
                 <c.icon size={16} strokeWidth={2.2} />
               </div>
               <div>
-                <h3 className="text-[14px] font-bold text-[var(--text-1)]">{c.title}</h3>
-                <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-3)]">{c.body}</p>
+                <h3 className="text-[13px] font-bold text-[var(--text-1)]">{c.title}</h3>
+                <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-3)]">{c.body}</p>
               </div>
             </div>
           </Reveal>

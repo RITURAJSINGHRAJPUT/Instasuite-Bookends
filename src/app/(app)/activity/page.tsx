@@ -33,6 +33,7 @@ const ACTION_LABEL: Record<string, string> = {
   "conversation.delete": "Deleted conversation",
   "conversation.mode_human": "Took over chat",
   "conversation.mode_agent": "Handed chat back to AI",
+  "conversation.mode_agent_bulk": "Handed all chats back to AI",
   "conversation.dismiss_notice": "Dismissed handoff notice",
   "review.completed": "Marked review done",
   "review.dismissed": "Dismissed review item",
@@ -131,7 +132,7 @@ export default function ActivityPage() {
         <ScrollText size={18} className="text-[var(--text-4)]" />
         <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Activity</h1>
       </div>
-      <p className="mt-1 text-[12px] text-[var(--text-5)]">
+      <p className="mt-1 text-[11px] text-[var(--text-5)]">
         Every change made in the dashboard, and who made it. Automated activity — the AI&apos;s own
         replies, scheduled jobs — isn&apos;t listed here.
       </p>
@@ -144,7 +145,7 @@ export default function ActivityPage() {
               setAction(f.value);
               setPage(1);
             }}
-            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
+            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-colors ${
               action === f.value
                 ? "bg-[var(--accent)] text-[var(--accent-fg)]"
                 : "border border-[var(--border)] text-[var(--text-4)] hover:bg-[var(--surface-2)]"
@@ -159,7 +160,7 @@ export default function ActivityPage() {
             setActor(e.target.value);
             setPage(1);
           }}
-          className="ml-auto rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2 py-1 text-[11px] text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
+          className="ml-auto rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2 py-1 text-[10px] text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
         >
           <option value="">Everyone</option>
           {actors.map((a) => (
@@ -172,14 +173,14 @@ export default function ActivityPage() {
 
       <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)]">
         {loading ? (
-          <div className="flex items-center justify-center gap-2 p-10 text-[12px] text-[var(--text-5)]">
+          <div className="flex items-center justify-center gap-2 p-10 text-[11px] text-[var(--text-5)]">
             <Loader2 size={14} className="animate-spin" />
             Loading…
           </div>
         ) : rows.length === 0 ? (
-          <p className="p-10 text-center text-[12px] text-[var(--text-5)]">No activity recorded yet.</p>
+          <p className="p-10 text-center text-[11px] text-[var(--text-5)]">No activity recorded yet.</p>
         ) : (
-          <table className="w-full text-left text-[12px]">
+          <table className="w-full text-left text-[11px]">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-[10px] uppercase tracking-wider text-[var(--text-5)]">
                 <th className="px-3 py-2 font-bold">When</th>
@@ -212,7 +213,7 @@ export default function ActivityPage() {
       </div>
 
       {total > pageSize && (
-        <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--text-5)]">
+        <div className="mt-3 flex items-center justify-between text-[10px] text-[var(--text-5)]">
           <span>
             Page {page} of {lastPage} · {total.toLocaleString()} entries
           </span>

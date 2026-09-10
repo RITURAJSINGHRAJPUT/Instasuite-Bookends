@@ -57,7 +57,7 @@ function ScopeToggle({ scope, setScope }: { scope: Scope; setScope: (s: Scope) =
           key={val}
           type="button"
           onClick={() => setScope(val)}
-          className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
+          className={`rounded-md px-2.5 py-1 text-[10px] font-bold transition-colors ${
             scope === val
               ? "bg-[var(--accent)] text-[var(--accent-fg)]"
               : "text-[var(--text-4)] hover:text-[var(--text-2)]"
@@ -70,14 +70,17 @@ function ScopeToggle({ scope, setScope }: { scope: Scope; setScope: (s: Scope) =
   );
 }
 
+// The 16px is load-bearing, not a style choice: iOS Safari auto-zooms any focused
+// input whose text is smaller, so this must NOT follow the rest of the type scale
+// down. `md:` drops it once we're past the phone breakpoint, where zoom can't fire.
 const INPUT =
-  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
+  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
 
 // A labelled step in the add-form, so the flow reads Brand → Outlet → … top to bottom.
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
       {children}
     </div>
   );
@@ -127,7 +130,7 @@ export default function UnavailablePage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
       <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Unavailable</h1>
-      <p className="text-[13px] text-[var(--text-4)]">
+      <p className="text-[12px] text-[var(--text-4)]">
         Mark a dish that&apos;s run out, or an outlet that&apos;s fully shut. While it&apos;s listed the
         AI agent won&apos;t offer the dish, or take bookings for the outlet — each clears automatically
         when its window ends.
@@ -156,8 +159,8 @@ function ColumnShell({
     <section className="min-w-0">
       <div className="mb-3 flex items-center gap-2">
         {icon}
-        <h2 className="text-[14px] font-bold text-[var(--text-1)]">{title}</h2>
-        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">
+        <h2 className="text-[13px] font-bold text-[var(--text-1)]">{title}</h2>
+        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--accent)]">
           {count}
         </span>
       </div>
@@ -303,7 +306,7 @@ function DishColumn({ businesses, businessId, setBusinessId }: ColProps) {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error}
         </p>
@@ -314,8 +317,8 @@ function DishColumn({ businesses, businessId, setBusinessId }: ColProps) {
       {!loading && rows.length === 0 && (
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] py-10 text-center">
           <CircleSlash size={20} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-2 text-[12px] font-bold text-[var(--text-1)]">Every dish is available</p>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">Add one above when you run out.</p>
+          <p className="mt-2 text-[11px] font-bold text-[var(--text-1)]">Every dish is available</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">Add one above when you run out.</p>
         </div>
       )}
 
@@ -327,7 +330,7 @@ function DishColumn({ businesses, businessId, setBusinessId }: ColProps) {
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-[14px] font-bold text-[var(--text-1)]">{r.dish}</p>
+                <p className="truncate text-[13px] font-bold text-[var(--text-1)]">{r.dish}</p>
                 <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-bold text-[var(--text-4)]">
                   {r.outlet?.trim() || "all outlets"}
                 </span>
@@ -335,7 +338,7 @@ function DishColumn({ businesses, businessId, setBusinessId }: ColProps) {
                   <span className="text-[10px] text-[var(--text-5)]">{r.business_name}</span>
                 )}
               </div>
-              <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
+              <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
                 {fmtUntil(r.ends_at)}
                 {r.note?.trim() ? ` · ${r.note.trim()}` : ""}
               </p>
@@ -481,7 +484,7 @@ function OutletColumn({ businesses, businessId, setBusinessId }: ColProps) {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error}
         </p>
@@ -492,8 +495,8 @@ function OutletColumn({ businesses, businessId, setBusinessId }: ColProps) {
       {!loading && rows.length === 0 && (
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] py-10 text-center">
           <Store size={20} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-2 text-[12px] font-bold text-[var(--text-1)]">All outlets open</p>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">Add one above when an outlet shuts.</p>
+          <p className="mt-2 text-[11px] font-bold text-[var(--text-1)]">All outlets open</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">Add one above when an outlet shuts.</p>
         </div>
       )}
 
@@ -505,7 +508,7 @@ function OutletColumn({ businesses, businessId, setBusinessId }: ColProps) {
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-[14px] font-bold text-[var(--text-1)]">{r.outlet}</p>
+                <p className="truncate text-[13px] font-bold text-[var(--text-1)]">{r.outlet}</p>
                 <span className="rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--danger)]">
                   closed
                 </span>
@@ -513,7 +516,7 @@ function OutletColumn({ businesses, businessId, setBusinessId }: ColProps) {
                   <span className="text-[10px] text-[var(--text-5)]">{r.business_name}</span>
                 )}
               </div>
-              <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
+              <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
                 {fmtUntil(r.ends_at)}
                 {r.note?.trim() ? ` · ${r.note.trim()}` : ""}
               </p>

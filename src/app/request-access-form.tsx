@@ -47,8 +47,11 @@ export default function RequestAccessForm() {
     );
   }
 
+    // The 16px is load-bearing, not a style choice: iOS Safari auto-zooms any focused
+  // input whose text is smaller, so this must NOT follow the rest of the type scale
+  // down. `md:` drops it once we're past the phone breakpoint, where zoom can't fire.
   const field =
-    "w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none";
+    "w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] md:text-sm text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none";
 
   return (
     <form onSubmit={handleSubmit} className="rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-6">

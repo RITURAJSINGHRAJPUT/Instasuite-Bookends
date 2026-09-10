@@ -105,6 +105,22 @@ function InboxInner() {
       .catch(() => {});
   }, [fetchConversations, fetchAccount]);
 
+  // Realtime below is the primary path; this slow poll is the floor under it. When the
+  // socket goes quiet — an expired JWT, a dropped connection, Supabase's per-client event
+  // cap — nothing surfaces that, and the Inbox simply stops updating until someone reloads
+  // the tab. With this, the worst case is 60s stale instead of silently frozen.
+  //
+  // Skipped while the tab is hidden: this app is the kind of thing that sits open in a
+  // background tab all day, and polling for nobody is just load on our own API.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      fetchConversations();
+      fetchAccount();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [fetchConversations, fetchAccount]);
+
   useEffect(() => {
     if (!supabase) return;
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -163,7 +179,7 @@ function InboxInner() {
       <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
         <div className="min-w-0">
           <h1 className="text-lg font-extrabold tracking-tight text-[var(--text-1)]">Inbox</h1>
-          <p className="text-[11px] text-[var(--text-4)]">
+          <p className="text-[10px] text-[var(--text-4)]">
             {conversations.length} conversation{conversations.length === 1 ? "" : "s"}
             {accounts.length > 1 && ` across ${accounts.length} accounts`}
           </p>
@@ -187,7 +203,7 @@ function InboxInner() {
       </div>
 
       {accountError && (
-        <p className="mx-4 mt-3 flex items-start gap-1.5 rounded-lg bg-[var(--danger-soft)] px-2.5 py-2 text-[11px] font-semibold text-[var(--danger)]">
+        <p className="mx-4 mt-3 flex items-start gap-1.5 rounded-lg bg-[var(--danger-soft)] px-2.5 py-2 text-[10px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={12} className="mt-px flex-shrink-0" />
           {accountError}
         </p>
@@ -217,7 +233,6 @@ function InboxInner() {
                 scripts={scripts}
                 liveMessage={liveMessage}
                 onChanged={fetchConversations}
-                showHeader={splitView}
                 showContext={!splitView}
                 // Handed to every panel; only the one that actually owns this
                 // conversation acts on it.

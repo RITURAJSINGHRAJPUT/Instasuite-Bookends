@@ -212,7 +212,7 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     if (isFirstMessage && isNoIntentOpener(text)) {
       // Faithful stand-in for the AI's own scripted welcome line — no AI call.
-      await sendCannedReply(account, conversation.id, igsid, cannedWelcome(account.businessName));
+      await sendCannedReply(account, conversation.id, igsid, cannedWelcome(account.businessName, account.takeawayEnabled));
       return;
     }
     if (!isFirstMessage && isTrivialAck(text)) {
@@ -401,6 +401,28 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // steps below must still run: the model was called and billed either way, the
     // Review row IS the point of this branch, and without the human flip the guest's
     // next message would just get an AI reply anyway.
+    // The brand does not do takeaway, but the model tried to take one anyway. The script
+    // says dine-in only and tenant.ts repeats it as a hard block, yet neither is a guarantee
+    // — so this is the part that actually holds. Beshak's first ever guest was offered a
+    // takeaway by the canned welcome; the model itself declining correctly afterwards is not
+    // something to rely on twice.
+    //
+    // Same shape as the collaboration branch below: the reply is DISCARDED rather than sent,
+    // because telling a guest their pickup is noted when no such service exists is worse
+    // than silence. Usage is still recorded (the model was billed), no order is captured,
+    // and a human takes the thread.
+    if (detected?.kind === "takeaway" && !account.takeawayEnabled) {
+      console.warn(
+        `Model emitted a TAKEAWAY line for @${account.username}, which is dine-in only — discarding.`
+      );
+      await recordUsage(account, ai);
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ mode: "human", human_handoff_reason: "review" })
+        .eq("id", conversation.id);
+      return;
+    }
+
     if (detectedReview?.category === "collaboration") {
       await recordUsage(account, ai);
       await captureReview(account, conversation, detectedReview);

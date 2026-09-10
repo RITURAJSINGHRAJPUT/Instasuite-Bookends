@@ -433,7 +433,7 @@ function OrdersInner() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="text-center">
           <AlertTriangle size={22} className="mx-auto text-[var(--danger)]" />
-          <p className="mt-3 text-[13px] font-bold text-[var(--text-1)]">Couldn&apos;t load orders</p>
+          <p className="mt-3 text-[12px] font-bold text-[var(--text-1)]">Couldn&apos;t load orders</p>
         </div>
       </div>
     );
@@ -446,7 +446,7 @@ function OrdersInner() {
           <h1 className="text-lg font-extrabold tracking-tight text-[var(--text-1)]">
             Orders &amp; Reservations
           </h1>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
             Confirm to message the customer and mark it done.
           </p>
         </div>
@@ -457,7 +457,7 @@ function OrdersInner() {
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-[10px] font-bold transition-colors ${
                   range === r
                     ? "bg-[var(--accent)] text-[var(--accent-fg)]"
                     : "text-[var(--text-4)] hover:text-[var(--text-2)]"
@@ -540,10 +540,10 @@ function OrdersInner() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="truncate text-[14px] font-bold text-[var(--text-1)]">
+                  <h3 className="truncate text-[13px] font-bold text-[var(--text-1)]">
                     {selected.customer_name || "Guest"}
                   </h3>
-                  <p className="truncate text-[11px] text-[var(--text-4)]">
+                  <p className="truncate text-[10px] text-[var(--text-4)]">
                     {acctLabel(selected)} · {fullDate(selected.created_at)}
                   </p>
                 </div>
@@ -558,14 +558,14 @@ function OrdersInner() {
             </div>
 
             {selected.cancellationRequested && (
-              <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--warn-soft)] px-3 py-2 text-[12px] font-bold text-[var(--warn)]">
+              <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--warn-soft)] px-3 py-2 text-[11px] font-bold text-[var(--warn)]">
                 <AlertTriangle size={13} className="flex-shrink-0" />
                 The guest asked to cancel this — review and confirm below.
               </p>
             )}
 
             {selected.scheduled_at && (
-              <p className="mt-3 flex items-center gap-1.5 text-[12px] font-bold text-[var(--text-1)]">
+              <p className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-[var(--text-1)]">
                 <Clock size={13} className="flex-shrink-0 text-[var(--accent)]" />
                 {bookedLabel(selected)} {bookedTime(selected.scheduled_at)}
               </p>
@@ -586,7 +586,7 @@ function OrdersInner() {
               {selected.status !== "cancelled" && selected.status !== "completed" && !editing && (
                 <button
                   onClick={() => startEdit(selected)}
-                  className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+                  className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
                 >
                   <Pencil size={11} /> Edit
                 </button>
@@ -595,7 +595,7 @@ function OrdersInner() {
 
             {editing ? (
               <div className="mt-1 space-y-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] p-3">
-                <p className="text-[11px] text-[var(--text-4)]">
+                <p className="text-[10px] text-[var(--text-4)]">
                   Use this when the booking changed on a call — so what&apos;s stored matches what
                   the guest was told.
                 </p>
@@ -606,7 +606,7 @@ function OrdersInner() {
                   <input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[12px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
                   />
                 </div>
                 <div>
@@ -617,7 +617,7 @@ function OrdersInner() {
                     type="datetime-local"
                     value={editWhen}
                     onChange={(e) => setEditWhen(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[12px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
                   />
                 </div>
                 <div>
@@ -628,10 +628,10 @@ function OrdersInner() {
                     value={editDetails}
                     onChange={(e) => setEditDetails(e.target.value)}
                     rows={3}
-                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 text-[12px] text-[var(--text-1)] focus:border-[var(--accent)] focus:outline-none"
                   />
                 </div>
-                <label className="flex cursor-pointer items-start gap-2 text-[12px] text-[var(--text-2)]">
+                <label className="flex cursor-pointer items-start gap-2 text-[11px] text-[var(--text-2)]">
                   <input
                     type="checkbox"
                     checked={editNotify}
@@ -644,14 +644,14 @@ function OrdersInner() {
                   <button
                     onClick={() => saveEdit(selected.id)}
                     disabled={savingEdit}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[12px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
                   >
                     {savingEdit && <Loader2 size={13} className="animate-spin" />}
                     Save changes
                   </button>
                   <button
                     onClick={() => setEditing(false)}
-                    className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
+                    className="rounded-lg border border-[var(--border)] px-4 py-2 text-[12px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
                   >
                     Cancel
                   </button>
@@ -663,7 +663,7 @@ function OrdersInner() {
                  verbatim into the takeaway confirmation DM by confirmationText() — so writing the
                  name in there would change what guests receive. Rendering it here instead also
                  means every order already in the ledger gains the line, not just future ones. */
-              <div className="mt-1 rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+              <div className="mt-1 rounded-xl bg-[var(--surface-1)] p-3 text-[11px] leading-relaxed text-[var(--text-2)]">
                 <p>
                   <span className="text-[var(--text-4)]">Name:</span>{" "}
                   {selected.customer_name || "Guest"}
@@ -675,7 +675,7 @@ function OrdersInner() {
             )}
 
             {actionError && (
-              <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+              <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
                 <AlertTriangle size={13} className="mt-px flex-shrink-0" />
                 {actionError}
               </p>
@@ -684,14 +684,14 @@ function OrdersInner() {
             {!editing && (
               <div className="mt-4 space-y-2">
                 {selected.status === "cancelled" ? (
-                  <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--danger)]">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--danger)]">
                     <Ban size={14} /> Cancelled — the customer was messaged.
                   </span>
                 ) : selected.status === "completed" ? (
                   // Done is undoable, unlike the other two endings — nothing was sent, so
                   // there's nothing to contradict by putting it back.
                   <>
-                    <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--text-3)]">
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--text-3)]">
                       <CheckCheck size={14} /> Completed
                       {selected.completed_at ? ` · ${fullDate(selected.completed_at)}` : ""}
                     </span>
@@ -713,14 +713,14 @@ function OrdersInner() {
                   // so each needs an explicit yes — especially cancelling something the guest
                   // has already been told is going ahead.
                   <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] p-3">
-                    <p className="text-[12px] font-bold text-[var(--text-1)]">
+                    <p className="text-[11px] font-bold text-[var(--text-1)]">
                       {pendingAction === "confirm"
                         ? "Send the customer a confirmation message?"
                         : selected.status === "confirmed"
                           ? "This order is already confirmed — the guest was told it's going ahead."
                           : "Send the customer a cancellation message?"}
                     </p>
-                    <p className="mt-1 text-[11px] text-[var(--text-4)]">
+                    <p className="mt-1 text-[10px] text-[var(--text-4)]">
                       {pendingAction === "cancel" && selected.status === "confirmed"
                         ? "Cancelling now sends them a contradicting message. Continue only if that's intended."
                         : "This sends a DM straight away and can't be undone."}
@@ -733,7 +733,7 @@ function OrdersInner() {
                             : cancelOrder(selected.id, selected.status === "confirmed")
                         }
                         disabled={confirming === selected.id || canceling === selected.id}
-                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-bold transition-colors disabled:opacity-40 ${
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-bold transition-colors disabled:opacity-40 ${
                           pendingAction === "confirm"
                             ? "bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
                             : "bg-[var(--danger)] text-white hover:opacity-90"
@@ -750,7 +750,7 @@ function OrdersInner() {
                       </button>
                       <button
                         onClick={() => setPendingAction(null)}
-                        className="rounded-lg border border-[var(--border)] px-4 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
+                        className="rounded-lg border border-[var(--border)] px-4 py-2 text-[12px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)]"
                       >
                         Back
                       </button>
@@ -759,7 +759,7 @@ function OrdersInner() {
                 ) : (
                   <>
                     {selected.status === "confirmed" ? (
-                      <span className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--ok)]">
                         <Check size={14} /> Confirmed — the customer was messaged.
                       </span>
                     ) : (
@@ -813,7 +813,7 @@ function OrdersInner() {
             {selected.kind === "reservation" && (
               <div className="mt-3">
                 {selected.feedback_sent_at ? (
-                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-4)]">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-4)]">
                     <Check size={14} /> Feedback sent
                   </span>
                 ) : (
@@ -831,7 +831,7 @@ function OrdersInner() {
                       Send feedback DM
                     </button>
                     {feedbackErr?.id === selected.id && (
-                      <p className="mt-1.5 text-[11px] font-semibold text-[var(--danger)]">
+                      <p className="mt-1.5 text-[10px] font-semibold text-[var(--danger)]">
                         {feedbackErr.msg}
                       </p>
                     )}
@@ -884,14 +884,14 @@ function Column({
     <section className="min-w-0">
       <div className="mb-3 flex items-center gap-2">
         {icon}
-        <h2 className="text-[14px] font-bold text-[var(--text-1)]">{title}</h2>
-        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">
+        <h2 className="text-[13px] font-bold text-[var(--text-1)]">{title}</h2>
+        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--accent)]">
           {rows.length}
         </span>
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-[var(--border)] px-4 py-6 text-center text-[12px] leading-relaxed text-[var(--text-5)]">
+        <p className="rounded-xl border border-[var(--border)] px-4 py-6 text-center text-[11px] leading-relaxed text-[var(--text-5)]">
           {empty}
         </p>
       ) : (
@@ -903,14 +903,14 @@ function Column({
               className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 transition-colors hover:bg-[var(--surface-1)]"
             >
               <div className="min-w-0">
-                <p className="truncate text-[13px] font-bold text-[var(--text-1)]">
+                <p className="truncate text-[12px] font-bold text-[var(--text-1)]">
                   {o.customer_name || "Guest"}
                 </p>
-                <p className="truncate text-[11px] text-[var(--text-4)]">
+                <p className="truncate text-[10px] text-[var(--text-4)]">
                   {acctLabel(o)} · {relTime(o.created_at)}
                 </p>
                 {o.scheduled_at && (
-                  <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-semibold text-[var(--text-2)]">
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-semibold text-[var(--text-2)]">
                     <Clock size={11} className="flex-shrink-0 text-[var(--accent)]" />
                     {bookedLabel(o)} {bookedTime(o.scheduled_at)}
                   </p>
@@ -953,7 +953,7 @@ function Column({
                       onConfirm(o);
                     }}
                     disabled={confirming === o.id}
-                    className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                    className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[10px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
                   >
                     {confirming === o.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                     Confirm
@@ -967,7 +967,7 @@ function Column({
                       onDone(o);
                     }}
                     disabled={completing === o.id}
-                    className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[11px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--ok)] hover:text-[var(--ok)] disabled:opacity-40"
+                    className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[10px] font-bold text-[var(--text-3)] transition-colors hover:border-[var(--ok)] hover:text-[var(--ok)] disabled:opacity-40"
                   >
                     {completing === o.id ? (
                       <Loader2 size={11} className="animate-spin" />
@@ -985,7 +985,7 @@ function Column({
                       onCancel(o);
                     }}
                     disabled={canceling === o.id}
-                    className="flex items-center gap-1 rounded-lg border border-[var(--danger)]/30 px-3 py-1.5 text-[11px] font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
+                    className="flex items-center gap-1 rounded-lg border border-[var(--danger)]/30 px-3 py-1.5 text-[10px] font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
                   >
                     {canceling === o.id ? <Loader2 size={11} className="animate-spin" /> : <Ban size={11} />}
                     Cancel
@@ -1005,7 +1005,7 @@ function Column({
                           onFeedback(o.id);
                         }}
                         disabled={sendingFeedback === o.id}
-                        className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-[11px] font-bold text-[var(--text-2)] transition-colors hover:border-[var(--accent)] disabled:opacity-40"
+                        className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-1.5 text-[10px] font-bold text-[var(--text-2)] transition-colors hover:border-[var(--accent)] disabled:opacity-40"
                       >
                         {sendingFeedback === o.id ? (
                           <Loader2 size={11} className="animate-spin" />

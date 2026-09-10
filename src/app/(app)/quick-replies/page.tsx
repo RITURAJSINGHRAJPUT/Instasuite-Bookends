@@ -18,13 +18,16 @@ type QuickReply = {
   created_at: string;
 };
 
+// The 16px is load-bearing, not a style choice: iOS Safari auto-zooms any focused
+// input whose text is smaller, so this must NOT follow the rest of the type scale
+// down. `md:` drops it once we're past the phone breakpoint, where zoom can't fire.
 const INPUT =
-  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
+  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
       {children}
     </div>
   );
@@ -92,7 +95,7 @@ export default function QuickRepliesPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-8">
       <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Quick Replies</h1>
-      <p className="text-[13px] text-[var(--text-4)]">
+      <p className="text-[12px] text-[var(--text-4)]">
         Pre-written messages staff can tap to send instantly from the Inbox. Each business keeps its
         own list.
       </p>
@@ -148,7 +151,7 @@ export default function QuickRepliesPage() {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error}
         </p>
@@ -159,8 +162,8 @@ export default function QuickRepliesPage() {
       {!loading && visible.length === 0 && (
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] py-10 text-center">
           <MessageSquareText size={20} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-2 text-[12px] font-bold text-[var(--text-1)]">No quick replies yet</p>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">Add one above to use it from the Inbox.</p>
+          <p className="mt-2 text-[11px] font-bold text-[var(--text-1)]">No quick replies yet</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">Add one above to use it from the Inbox.</p>
         </div>
       )}
 
@@ -172,12 +175,12 @@ export default function QuickRepliesPage() {
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-[13px] font-semibold text-[var(--text-1)]">{r.title}</p>
+                <p className="truncate text-[12px] font-semibold text-[var(--text-1)]">{r.title}</p>
                 {showBiz && r.business_name && (
                   <span className="text-[10px] text-[var(--text-5)]">{r.business_name}</span>
                 )}
               </div>
-              <p className="mt-0.5 truncate text-[11px] text-[var(--text-4)]">{r.message}</p>
+              <p className="mt-0.5 truncate text-[10px] text-[var(--text-4)]">{r.message}</p>
             </div>
             <button
               onClick={() => remove(r.id)}

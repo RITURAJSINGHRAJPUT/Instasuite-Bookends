@@ -16,6 +16,12 @@ export type ResolvedAccount = {
   accessToken: string;
   /** instagram_accounts.script_id ?? businesses.default_script_id */
   systemPrompt: string;
+  /**
+   * Does this brand take takeaway at all? Beshak is dine-in reservations only. The webhook
+   * refuses to capture a takeaway order when this is false — the script states the rule,
+   * this is what makes it true.
+   */
+  takeawayEnabled: boolean;
 };
 
 type AccountRow = {
@@ -102,7 +108,20 @@ export async function resolveAccountByIgId(
   // Append the business's currently-86'd items so the agent stops offering them.
   // getUnavailableBlock returns "" on empty or any error, so this never breaks a reply
   // and appends AFTER the menu (the block states it overrides the menu above it).
-  const unavailable = await getUnavailableBlock(data.business_id);
+  //
+  // takeaway_enabled is read HERE rather than joined into the query above, deliberately.
+  // That query is the critical path for every inbound message: if the column were in its
+  // select and the code shipped before migration 0027, PostgREST would 400 on it, this
+  // function would return null, and EVERY account would go silent. On its own side path it
+  // degrades to "takeaway allowed" instead — the pre-migration status quo. Runs in parallel,
+  // so it costs no extra latency.
+  const [unavailable, takeawayEnabled] = await Promise.all([
+    getUnavailableBlock(data.business_id),
+    getTakeawayEnabled(data.business_id),
+  ]);
+
+  const dineInOnly = takeawayEnabled ? "" : DINE_IN_ONLY_BLOCK;
+  const prompt = [script.content, unavailable, dineInOnly].filter(Boolean).join("\n\n");
 
   return {
     accountId: data.id,
@@ -112,6 +131,39 @@ export async function resolveAccountByIgId(
     igAccountId: data.ig_account_id,
     username: data.username,
     accessToken,
-    systemPrompt: unavailable ? `${script.content}\n\n${unavailable}` : script.content,
+    systemPrompt: prompt,
+    takeawayEnabled,
   };
+}
+
+// Stated positively and last, so it outranks anything earlier in the script that talks about
+// pickups. The webhook enforces this independently — the model is told, not trusted.
+const DINE_IN_ONLY_BLOCK = [
+  "## Dine-in only (overrides everything above)",
+  "This brand takes DINE-IN TABLE RESERVATIONS ONLY. It does not do takeaway, pickup, delivery or parcels — not now, not later today, not by arrangement.",
+  "Never offer one, never ask whether the guest wants one, and never note, accept or confirm one. Never emit a TAKEAWAY hand-off line.",
+  "If a guest asks for takeaway or delivery, say warmly that we're dine-in only at the moment and offer to book them a table instead.",
+].join("\n");
+
+/**
+ * Whether this business takes takeaway. Defaults to TRUE on any error — including the
+ * column not existing yet — because that is the behaviour every brand had before the flag,
+ * and a lookup failure must never silently stop a working brand from taking orders.
+ */
+async function getTakeawayEnabled(businessId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("businesses")
+      .select("takeaway_enabled")
+      .eq("id", businessId)
+      .maybeSingle<{ takeaway_enabled: boolean | null }>();
+    if (error) {
+      console.warn(`takeaway_enabled unreadable (${error.message}) — assuming takeaway is on.`);
+      return true;
+    }
+    return data?.takeaway_enabled ?? true;
+  } catch (err) {
+    console.warn(`takeaway_enabled threw (${(err as Error).message}) — assuming takeaway is on.`);
+    return true;
+  }
 }

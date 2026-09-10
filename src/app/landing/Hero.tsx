@@ -9,7 +9,7 @@ export default function Hero() {
           <div>
             <span
               data-hero-item
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--accent)]"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--accent)]"
             >
               AI Instagram DM agent for restaurants
             </span>
@@ -21,7 +21,7 @@ export default function Hero() {
               Every Instagram DM, answered like your best host.
             </h1>
 
-            <p data-hero-item className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--text-3)]">
+            <p data-hero-item className="mt-5 max-w-md text-[14px] leading-relaxed text-[var(--text-3)]">
               Instasuite&apos;s AI agent replies to your restaurant&apos;s Instagram DMs in your
               own voice — capturing table reservations and takeaway orders straight out of the
               conversation, ready for your team to confirm.

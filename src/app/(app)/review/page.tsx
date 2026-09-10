@@ -229,7 +229,7 @@ function ReviewInner() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="text-center">
           <AlertTriangle size={22} className="mx-auto text-[var(--danger)]" />
-          <p className="mt-3 text-[13px] font-bold text-[var(--text-1)]">Couldn&apos;t load the review queue</p>
+          <p className="mt-3 text-[12px] font-bold text-[var(--text-1)]">Couldn&apos;t load the review queue</p>
         </div>
       </div>
     );
@@ -240,7 +240,7 @@ function ReviewInner() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3.5 md:px-6">
         <div className="min-w-0">
           <h1 className="text-lg font-extrabold tracking-tight text-[var(--text-1)]">Review</h1>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
             Handoffs that need a person — review before completion. The chat is paused for the AI.
           </p>
         </div>
@@ -314,10 +314,10 @@ function ReviewInner() {
                   <Flag size={16} className="text-[var(--accent)]" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="truncate text-[14px] font-bold text-[var(--text-1)]">
+                  <h3 className="truncate text-[13px] font-bold text-[var(--text-1)]">
                     {selected.customer_name || "Guest"}
                   </h3>
-                  <p className="truncate text-[11px] text-[var(--text-4)]">
+                  <p className="truncate text-[10px] text-[var(--text-4)]">
                     {acctLabel(selected)} · {fullDate(selected.created_at)}
                   </p>
                 </div>
@@ -335,7 +335,7 @@ function ReviewInner() {
               <CategoryChip category={selected.category} />
               <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">Matter</span>
             </div>
-            <p className="mt-1.5 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+            <p className="mt-1.5 whitespace-pre-wrap rounded-xl bg-[var(--surface-1)] p-3 text-[11px] leading-relaxed text-[var(--text-2)]">
               {selected.details || "No further detail captured."}
             </p>
 
@@ -347,7 +347,7 @@ function ReviewInner() {
                 <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent)]">
                   This message will be sent to {selected.customer_name || "the guest"}
                 </p>
-                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--surface-1)] p-3 text-[12px] leading-relaxed text-[var(--text-2)]">
+                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--surface-1)] p-3 text-[11px] leading-relaxed text-[var(--text-2)]">
                   {COLLAB_DECLINE}
                 </p>
                 <div className="mt-3 flex items-center gap-2">
@@ -408,7 +408,7 @@ function ReviewInner() {
                   </button>
                 </>
               ) : (
-                <span className="flex flex-1 items-center justify-center gap-1.5 text-[12px] font-bold text-[var(--ok)]">
+                <span className="flex flex-1 items-center justify-center gap-1.5 text-[11px] font-bold text-[var(--ok)]">
                   <Check size={14} /> {selected.status === "dismissed" ? "Dismissed" : "Reviewed"}
                 </span>
               )}
@@ -441,14 +441,14 @@ function Section({
     <section className="min-w-0">
       <div className="mb-3 flex items-center gap-2">
         {icon}
-        <h2 className="text-[14px] font-bold text-[var(--text-1)]">{title}</h2>
-        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">
+        <h2 className="text-[13px] font-bold text-[var(--text-1)]">{title}</h2>
+        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--accent)]">
           {rows.length}
         </span>
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-[var(--border)] px-4 py-6 text-center text-[12px] leading-relaxed text-[var(--text-5)]">
+        <p className="rounded-xl border border-[var(--border)] px-4 py-6 text-center text-[11px] leading-relaxed text-[var(--text-5)]">
           {empty}
         </p>
       ) : (
@@ -462,14 +462,14 @@ function Section({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <CategoryChip category={r.category} />
-                  <p className="truncate text-[13px] font-bold text-[var(--text-1)]">
+                  <p className="truncate text-[12px] font-bold text-[var(--text-1)]">
                     {r.customer_name || "Guest"}
                   </p>
                 </div>
-                <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-[var(--text-3)]">
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--text-3)]">
                   {r.details || "No detail captured."}
                 </p>
-                <p className="mt-1 truncate text-[11px] text-[var(--text-4)]">
+                <p className="mt-1 truncate text-[10px] text-[var(--text-4)]">
                   {acctLabel(r)} · {relTime(r.created_at)}
                 </p>
               </div>
@@ -480,7 +480,7 @@ function Section({
                     onResolve(r.id);
                   }}
                   disabled={working === r.id}
-                  className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                  className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[10px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
                 >
                   {working === r.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                   Reviewed

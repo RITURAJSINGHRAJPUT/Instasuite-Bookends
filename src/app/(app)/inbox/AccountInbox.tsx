@@ -66,6 +66,15 @@ function getInitials(name: string | null, igsid: string) {
   return igsid.slice(-2);
 }
 
+// Has this thread actually moved? Messages are append-only and never edited in place, so
+// length plus the last row's id settles it without walking the array. Used to keep the
+// messages array's IDENTITY stable across a poll that found nothing new — the auto-scroll
+// effect keys off that identity, so a fresh array every minute would drag anyone reading
+// back through a long chat down to the bottom.
+function sameThread(a: Message[], b: Message[]) {
+  return a.length === b.length && a[a.length - 1]?.id === b[b.length - 1]?.id;
+}
+
 // Header for the Ongoing / Completed groups in the conversation list.
 function SectionLabel({ label, count }: { label: string; count: number }) {
   return (
@@ -161,7 +170,7 @@ function MediaCard({ media, align }: { media: Media; align: "start" | "end" }) {
         </div>
       )}
       {media.title && (
-        <p className="mt-1 max-w-[200px] truncate px-1 text-[11px] text-[var(--text-4)]">
+        <p className="mt-1 max-w-[200px] truncate px-1 text-[10px] text-[var(--text-4)]">
           {media.title}
         </p>
       )}
@@ -175,7 +184,6 @@ export default function AccountInbox({
   scripts,
   liveMessage,
   onChanged,
-  showHeader,
   showContext,
   focusConversationId,
 }: {
@@ -187,8 +195,6 @@ export default function AccountInbox({
   liveMessage: Message | null;
   /** Tell the parent to refetch the shared conversation list. */
   onChanged: () => void;
-  /** The @username strip — only useful when more than one panel is on screen. */
-  showHeader: boolean;
   /** The profile/AI-context aside. No room for it in split mode. */
   showContext: boolean;
   /**
@@ -206,6 +212,8 @@ export default function AccountInbox({
   // Set when Instagram refused the reply (too long, 24h window closed, dead token).
   // The guest got nothing, so this has to be visible rather than swallowed.
   const [sendError, setSendError] = useState<string | null>(null);
+  const [handingBack, setHandingBack] = useState(false);
+  const [handBackError, setHandBackError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithLastMessage | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -324,14 +332,14 @@ export default function AccountInbox({
           <Avatar src={convo.profile_pic} name={convo.name} igsid={convo.igsid} size={36} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-[13px] font-bold text-[var(--text-1)]">
+              <span className="truncate text-[12px] font-bold text-[var(--text-1)]">
                 {convo.name || convo.username || convo.igsid}
               </span>
               <span className="flex-shrink-0 text-[10px] text-[var(--text-5)]">
                 {formatTime(convo.updated_at)}
               </span>
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-[var(--text-4)]">
+            <p className="mt-0.5 truncate text-[10px] text-[var(--text-4)]">
               {convo.last_message || (convo.username ? `@${convo.username}` : "")}
             </p>
             <span
@@ -387,7 +395,10 @@ export default function AccountInbox({
       messageCache.current.set(convoId, list);
       // Only paint if this is still the conversation on screen.
       if (latestRequest.current === convoId) {
-        setMessages(list);
+        // Keep the existing array when nothing changed — see sameThread. Every fetch
+        // parses a new array, so an unconditional set would repaint the whole
+        // non-virtualized thread and re-fire the scroll effect on every poll.
+        setMessages((prev) => (sameThread(prev, list) ? prev : list));
         setLoadingMessages(false);
       }
     } catch {
@@ -410,6 +421,18 @@ export default function AccountInbox({
     setLoadingMessages(!cached);
     // Always revalidate in the background, so a cached view is never stale for long.
     fetchMessages(selectedId);
+  }, [selectedId, fetchMessages]);
+
+  // The open thread on the same slow cadence as the parent's list poll, and for the same
+  // reason: Realtime is the fast path, this is the floor under it. A tick that finds
+  // nothing new is inert — fetchMessages keeps the existing array, so neither this list
+  // nor the scroll position moves.
+  useEffect(() => {
+    if (!selectedId) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") fetchMessages(selectedId);
+    }, 60_000);
+    return () => clearInterval(t);
   }, [selectedId, fetchMessages]);
 
   useEffect(() => {
@@ -444,6 +467,30 @@ export default function AccountInbox({
     // while it was still replying.
     if (!res.ok) return;
     onChanged();
+  }
+
+  // Every human-mode chat on this account, back to the AI at once. No acknowledgement
+  // step, unlike Confirm/Cancel on an order: nothing is sent to any guest here, and any
+  // single chat can be taken back over immediately afterwards.
+  async function handBackAll() {
+    if (handingBack) return;
+    setHandingBack(true);
+    setHandBackError(null);
+    try {
+      const res = await fetch(`/api/accounts/${account.id}/handback`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setHandBackError(d?.error || "Couldn't hand these chats back.");
+        return;
+      }
+      // Same rule as toggleMode: reflect only what the server accepted. onChanged
+      // refetches the shared list, which is what actually repaints the modes.
+      onChanged();
+    } catch {
+      setHandBackError("Couldn't reach the server.");
+    } finally {
+      setHandingBack(false);
+    }
   }
 
   // Clears the "log this order" nudge below without leaving human mode — for when
@@ -506,48 +553,75 @@ export default function AccountInbox({
   const activeScriptId = account.script_id ?? account.businesses?.default_script_id ?? null;
   const activeScript = scripts.find((s) => s.id === activeScriptId);
 
+  // Chats this account is currently answering by hand — drives the bulk hand-back button.
+  // Read off the list the parent already loaded, so it costs no extra request and can
+  // never disagree with the modes on screen.
+  const humanCount = conversations.filter((c) => c.mode === "human").length;
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {showHeader && (
-        <div
-          className="flex flex-shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4 py-2.5"
-          style={{ background: "var(--panel-bg)" }}
-        >
-          <Avatar
-            src={account.profile_picture_url}
-            name={account.name}
-            igsid={account.ig_account_id}
-            size={28}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-bold text-[var(--text-1)]">
-              {account.username ? `@${account.username}` : account.ig_account_id}
-            </p>
-            <p className="truncate text-[10px] text-[var(--text-4)]">
-              {conversations.length} conversation{conversations.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          {/* Acts on the SELECTED conversation, not the account — mode is
-              per-conversation. Only rendered with something selected: a permanently
-              disabled control here would be worse than none. Same wording and
-              colours as the context aside's button so they read as one action, and
-              both stay in sync because each reads selected.mode from the shared
-              conversation list. */}
-          {selected && (
-            <button
-              onClick={toggleMode}
-              className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                selected.mode === "agent"
-                  ? "border-[var(--warn)]/30 text-[var(--warn)] hover:bg-[var(--warn-soft)]"
-                  : "border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent-soft)]"
-              }`}
-            >
-              {selected.mode === "agent" ? <Hand size={12} /> : <Bot size={12} />}
-              {selected.mode === "agent" ? "Take over" : "Back to AI"}
-            </button>
-          )}
+      {/* Always rendered now, not just in split view. It was multi-account-only on the
+          grounds that the page toolbar already names the account — but this is also the
+          only strip scoped to ONE account, so the account-level action below has nowhere
+          else to live, and hiding it left single-account tenants with no way to reach it. */}
+      <div
+        className="flex flex-shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4 py-2.5"
+        style={{ background: "var(--panel-bg)" }}
+      >
+        <Avatar
+          src={account.profile_picture_url}
+          name={account.name}
+          igsid={account.ig_account_id}
+          size={28}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-bold text-[var(--text-1)]">
+            {account.username ? `@${account.username}` : account.ig_account_id}
+          </p>
+          <p className="truncate text-[10px] text-[var(--text-4)]">
+            {handBackError ? (
+              <span className="font-semibold text-[var(--danger)]">{handBackError}</span>
+            ) : (
+              <>
+                {conversations.length} conversation{conversations.length === 1 ? "" : "s"}
+              </>
+            )}
+          </p>
         </div>
-      )}
+        {/* Acts on the whole ACCOUNT, unlike the per-conversation button beside it, so
+            the two labels have to stay tellable apart at a glance. Hidden rather than
+            disabled at zero, for the same reason as the button below. */}
+        {humanCount > 0 && (
+          <button
+            onClick={handBackAll}
+            disabled={handingBack}
+            title={`Hand all ${humanCount} human-handled chat${humanCount === 1 ? "" : "s"} on this account back to the AI`}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-[var(--accent)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] disabled:opacity-40"
+          >
+            {handingBack ? <Loader2 size={12} className="animate-spin" /> : <Bot size={12} />}
+            All back to AI ({humanCount})
+          </button>
+        )}
+        {/* Acts on the SELECTED conversation, not the account — mode is
+            per-conversation. Only rendered with something selected: a permanently
+            disabled control here would be worse than none. Same wording and
+            colours as the context aside's button so they read as one action, and
+            both stay in sync because each reads selected.mode from the shared
+            conversation list. */}
+        {selected && (
+          <button
+            onClick={toggleMode}
+            className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-colors ${
+              selected.mode === "agent"
+                ? "border-[var(--warn)]/30 text-[var(--warn)] hover:bg-[var(--warn-soft)]"
+                : "border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+            }`}
+          >
+            {selected.mode === "agent" ? <Hand size={12} /> : <Bot size={12} />}
+            {selected.mode === "agent" ? "Take over" : "Back to AI"}
+          </button>
+        )}
+      </div>
 
       <div className="flex min-h-0 min-w-0 flex-1">
         {/* List — full width on mobile, hidden once a chat is open */}
@@ -571,13 +645,13 @@ export default function AccountInbox({
                 {ongoing.length ? (
                   ongoing.map(renderConvRow)
                 ) : (
-                  <p className="px-4 py-3 text-[11px] text-[var(--text-5)]">Nothing ongoing.</p>
+                  <p className="px-4 py-3 text-[10px] text-[var(--text-5)]">Nothing ongoing.</p>
                 )}
                 <SectionLabel label="Completed" count={completed.length} />
                 {completed.length ? (
                   completed.map(renderConvRow)
                 ) : (
-                  <p className="px-4 py-3 text-[11px] text-[var(--text-5)]">Nothing completed.</p>
+                  <p className="px-4 py-3 text-[10px] text-[var(--text-5)]">Nothing completed.</p>
                 )}
               </>
             )}
@@ -592,7 +666,7 @@ export default function AccountInbox({
                 <MessageSquare size={24} className="text-[var(--text-6)]" />
               </div>
               <div className="text-center">
-                <p className="text-[13px] font-bold text-[var(--text-3)]">Select a conversation</p>
+                <p className="text-[12px] font-bold text-[var(--text-3)]">Select a conversation</p>
                 <p className="mt-1 text-xs text-[var(--text-5)]">
                   Choose from the list to start chatting
                 </p>
@@ -619,10 +693,10 @@ export default function AccountInbox({
                     size={36}
                   />
                   <div className="min-w-0">
-                    <h2 className="truncate text-[14px] font-bold text-[var(--text-1)]">
+                    <h2 className="truncate text-[13px] font-bold text-[var(--text-1)]">
                       {selected.name || selected.username || selected.igsid}
                     </h2>
-                    <p className="truncate text-[11px] text-[var(--text-4)]">
+                    <p className="truncate text-[10px] text-[var(--text-4)]">
                       {selected.username ? `@${selected.username}` : selected.igsid}
                     </p>
                   </div>
@@ -630,7 +704,7 @@ export default function AccountInbox({
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <button
                     onClick={toggleMode}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
                       selected.mode === "agent"
                         ? "border-[var(--accent)]/25 bg-[var(--accent-soft)] text-[var(--accent)]"
                         : "border-[var(--warn)]/25 bg-[var(--warn-soft)] text-[var(--warn)]"
@@ -655,7 +729,7 @@ export default function AccountInbox({
               {selected.mode === "human" &&
                 selected.human_handoff_reason === "undelivered" && (
                   <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-[var(--danger)]/25 bg-[var(--danger-soft)] px-4 py-2.5">
-                    <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-[var(--danger)]">
+                    <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold text-[var(--danger)]">
                       <AlertTriangle size={14} className="flex-shrink-0" />
                       <span className="truncate">
                         Instagram rejected the AI&apos;s last reply, so the guest never received
@@ -678,7 +752,7 @@ export default function AccountInbox({
                   <div
                     className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-[var(--warn)]/25 bg-[var(--warn-soft)] px-4 py-2.5"
                   >
-                    <div className="flex min-w-0 items-center gap-2 text-[11px] font-bold text-[var(--warn)]">
+                    <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold text-[var(--warn)]">
                       <AlertTriangle size={14} className="flex-shrink-0" />
                       <span className="truncate">
                         The AI went down mid-chat and handed this to a human. If you confirmed a
@@ -689,7 +763,7 @@ export default function AccountInbox({
                     <div className="flex flex-shrink-0 items-center gap-2">
                       <button
                         onClick={() => openLogOrder(selected)}
-                        className="flex items-center gap-1.5 rounded-lg border border-[var(--warn)]/30 px-2.5 py-1 text-[11px] font-bold text-[var(--warn)] transition-colors hover:bg-[var(--warn)]/10"
+                        className="flex items-center gap-1.5 rounded-lg border border-[var(--warn)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--warn)] transition-colors hover:bg-[var(--warn)]/10"
                       >
                         <Receipt size={12} />
                         Log order
@@ -713,7 +787,7 @@ export default function AccountInbox({
                   hiding the notice would only hide the reason the chat has gone quiet. */}
               {selected.mode === "human" &&
                 selected.human_handoff_reason === "awaiting_confirmation" && (
-                  <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--warn)]/25 bg-[var(--warn-soft)] px-4 py-2.5 text-[11px] font-bold text-[var(--warn)]">
+                  <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--warn)]/25 bg-[var(--warn-soft)] px-4 py-2.5 text-[10px] font-bold text-[var(--warn)]">
                     <AlertTriangle size={14} className="flex-shrink-0" />
                     <span className="truncate">
                       The AI has paused — this guest is waiting on your confirmation. Confirm the
@@ -757,7 +831,7 @@ export default function AccountInbox({
                         {/* A media-only message has no text — don't render an empty bubble. */}
                         {msg.content?.trim() && (
                           <div
-                            className={`rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
+                            className={`rounded-2xl px-4 py-2.5 text-[12px] leading-relaxed ${
                               isUser
                                 ? "rounded-tl-sm border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)]"
                                 : "rounded-tr-sm text-white"
@@ -789,10 +863,10 @@ export default function AccountInbox({
                     <div className="fixed inset-0 z-10" onClick={() => setShowQuickReplies(false)} />
                     <div className="absolute bottom-full left-4 right-4 z-20 mb-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-1.5 shadow-lg">
                       {loadingQuickReplies && (
-                        <p className="px-2.5 py-2 text-[11px] text-[var(--text-4)]">Loading…</p>
+                        <p className="px-2.5 py-2 text-[10px] text-[var(--text-4)]">Loading…</p>
                       )}
                       {!loadingQuickReplies && quickReplies?.length === 0 && (
-                        <p className="px-2.5 py-2 text-[11px] text-[var(--text-4)]">
+                        <p className="px-2.5 py-2 text-[10px] text-[var(--text-4)]">
                           No quick replies yet — add some from the Quick Replies page.
                         </p>
                       )}
@@ -804,15 +878,15 @@ export default function AccountInbox({
                             disabled={sending}
                             className="block w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-1)] disabled:opacity-50"
                           >
-                            <p className="truncate text-[12px] font-bold text-[var(--text-1)]">{qr.title}</p>
-                            <p className="truncate text-[11px] text-[var(--text-4)]">{qr.message}</p>
+                            <p className="truncate text-[11px] font-bold text-[var(--text-1)]">{qr.title}</p>
+                            <p className="truncate text-[10px] text-[var(--text-4)]">{qr.message}</p>
                           </button>
                         ))}
                     </div>
                   </>
                 )}
                 {sendError && (
-                  <div className="mb-1.5 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
+                  <div className="mb-1.5 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[10px] font-semibold text-[var(--danger)]">
                     <AlertTriangle size={13} className="mt-px flex-shrink-0" />
                     <span className="min-w-0 flex-1">Not delivered — {sendError}</span>
                     <button
@@ -843,7 +917,7 @@ export default function AccountInbox({
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                     placeholder={`Reply to ${selected.name?.split(" ")[0] || "customer"}…`}
-                    className="min-w-0 flex-1 bg-transparent text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:text-[13px]"
+                    className="min-w-0 flex-1 bg-transparent text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:text-[12px]"
                   />
                   <button
                     onClick={handleSend}
@@ -883,18 +957,18 @@ export default function AccountInbox({
                 igsid={selected.igsid}
                 size={72}
               />
-              <h3 className="mt-3 text-[15px] font-bold text-[var(--text-1)]">
+              <h3 className="mt-3 text-[14px] font-bold text-[var(--text-1)]">
                 {selected.name || selected.username || selected.igsid}
               </h3>
               {selected.username && (
-                <p className="text-[11px] text-[var(--text-4)]">@{selected.username}</p>
+                <p className="text-[10px] text-[var(--text-4)]">@{selected.username}</p>
               )}
-              <p className="mt-1 text-[11px] text-[var(--text-5)]">
+              <p className="mt-1 text-[10px] text-[var(--text-5)]">
                 In touch since {formatDate(selected.created_at)}
               </p>
               <button
                 onClick={toggleMode}
-                className={`mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-bold transition-colors ${
+                className={`mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-bold transition-colors ${
                   selected.mode === "agent"
                     ? "border-[var(--warn)]/30 text-[var(--warn)] hover:bg-[var(--warn-soft)]"
                     : "border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent-soft)]"
@@ -913,7 +987,7 @@ export default function AccountInbox({
                 <div className="flex items-start gap-2">
                   <FileText size={13} className="mt-0.5 flex-shrink-0 text-[var(--accent)]" />
                   <div className="min-w-0">
-                    <p className="text-[12px] font-bold text-[var(--accent)]">
+                    <p className="text-[11px] font-bold text-[var(--accent)]">
                       {activeScript ? activeScript.name : "No script resolved"}
                     </p>
                     <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
@@ -928,7 +1002,7 @@ export default function AccountInbox({
                 {activeScript && (
                   <Link
                     href={`/scripts?script=${activeScript.id}`}
-                    className="mt-2.5 block text-[11px] font-bold text-[var(--accent)] hover:underline"
+                    className="mt-2.5 block text-[10px] font-bold text-[var(--accent)] hover:underline"
                   >
                     Edit script →
                   </Link>
@@ -991,7 +1065,7 @@ export default function AccountInbox({
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--danger-soft)]">
                 <Trash2 size={15} className="text-[var(--danger)]" />
               </div>
-              <h3 className="text-[14px] font-bold text-[var(--text-1)]">Delete conversation?</h3>
+              <h3 className="text-[13px] font-bold text-[var(--text-1)]">Delete conversation?</h3>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-[var(--text-4)]">
               This permanently removes{" "}
@@ -1036,8 +1110,8 @@ export default function AccountInbox({
                   <Receipt size={15} className="text-[var(--accent)]" />
                 </div>
                 <div>
-                  <h3 className="text-[14px] font-bold text-[var(--text-1)]">Log an order</h3>
-                  <p className="text-[11px] text-[var(--text-4)]">
+                  <h3 className="text-[13px] font-bold text-[var(--text-1)]">Log an order</h3>
+                  <p className="text-[10px] text-[var(--text-4)]">
                     For a booking you handled by typing your own reply
                   </p>
                 </div>
@@ -1058,7 +1132,7 @@ export default function AccountInbox({
                     key={k}
                     type="button"
                     onClick={() => setOrderKind(k)}
-                    className={`flex-1 rounded-md px-2.5 py-1.5 text-[12px] font-bold capitalize transition-colors ${
+                    className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-bold capitalize transition-colors ${
                       orderKind === k
                         ? "bg-[var(--accent)] text-[var(--accent-fg)]"
                         : "text-[var(--text-4)] hover:text-[var(--text-2)]"
@@ -1096,7 +1170,7 @@ export default function AccountInbox({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-semibold text-[var(--text-4)]">
+                <label className="mb-1 block text-[10px] font-semibold text-[var(--text-4)]">
                   {orderKind === "reservation" ? "Reservation time" : "Pickup time"}
                 </label>
                 <input
@@ -1107,7 +1181,7 @@ export default function AccountInbox({
                 />
               </div>
 
-              <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-[12px] text-[var(--text-2)]">
+              <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-3.5 py-3 text-[11px] text-[var(--text-2)]">
                 <input
                   type="checkbox"
                   checked={orderAlreadyConfirmed}
@@ -1122,7 +1196,7 @@ export default function AccountInbox({
               </label>
 
               {orderError && (
-                <p className="text-[11px] font-semibold text-[var(--danger)]">{orderError}</p>
+                <p className="text-[10px] font-semibold text-[var(--danger)]">{orderError}</p>
               )}
             </div>
 
@@ -1130,14 +1204,14 @@ export default function AccountInbox({
               <button
                 onClick={() => setLogOrderTarget(null)}
                 disabled={savingOrder}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
+                className="rounded-lg px-3.5 py-2 text-[12px] font-bold text-[var(--text-3)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 onClick={submitLogOrder}
                 disabled={savingOrder}
-                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-[12px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
               >
                 {savingOrder && <Loader2 size={13} className="animate-spin" />}
                 Log order
@@ -1153,11 +1227,11 @@ export default function AccountInbox({
 function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="flex items-center gap-1.5 text-[11px] text-[var(--text-4)]">
+      <span className="flex items-center gap-1.5 text-[10px] text-[var(--text-4)]">
         {icon}
         {label}
       </span>
-      <span className="truncate text-[11px] font-bold text-[var(--text-2)]">{value}</span>
+      <span className="truncate text-[10px] font-bold text-[var(--text-2)]">{value}</span>
     </div>
   );
 }

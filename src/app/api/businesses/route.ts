@@ -11,7 +11,7 @@ export async function GET() {
 
   let q = supabaseAdmin
     .from("businesses")
-    .select("id, name, status, default_script_id, public_handle, created_at, instagram_accounts(id, ig_account_id, username, name, status, script_id), outlets(id, name)")
+    .select("id, name, status, default_script_id, public_handle, takeaway_enabled, created_at, instagram_accounts(id, ig_account_id, username, name, status, script_id), outlets(id, name)")
     .order("created_at", { ascending: true });
 
   // Staff see every business; a client only their own.

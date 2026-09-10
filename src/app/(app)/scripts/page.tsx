@@ -215,8 +215,8 @@ function ScriptsInner() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="text-center">
           <AlertTriangle size={22} className="mx-auto text-[var(--danger)]" />
-          <p className="mt-3 text-[13px] font-bold text-[var(--text-1)]">Couldn&apos;t load your scripts</p>
-          <p className="mt-1 max-w-xs text-[12px] text-[var(--text-4)]">
+          <p className="mt-3 text-[12px] font-bold text-[var(--text-1)]">Couldn&apos;t load your scripts</p>
+          <p className="mt-1 max-w-xs text-[11px] text-[var(--text-4)]">
             Something went wrong reaching the server.
           </p>
           <button
@@ -224,7 +224,7 @@ function ScriptsInner() {
               setLoading(true);
               loadList();
             }}
-            className="mt-4 inline-block rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+            className="mt-4 inline-block rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[11px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
           >
             Retry
           </button>
@@ -239,13 +239,13 @@ function ScriptsInner() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="text-center">
           <FileText size={22} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-3 text-[13px] font-bold text-[var(--text-1)]">No scripts yet</p>
-          <p className="mt-1 max-w-xs text-[12px] text-[var(--text-4)]">
+          <p className="mt-3 text-[12px] font-bold text-[var(--text-1)]">No scripts yet</p>
+          <p className="mt-1 max-w-xs text-[11px] text-[var(--text-4)]">
             A script is created automatically with your first business.
           </p>
           <Link
             href="/businesses"
-            className="mt-4 inline-block rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+            className="mt-4 inline-block rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[11px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
           >
             Add a business
           </Link>
@@ -278,7 +278,7 @@ function ScriptsInner() {
             aria-label="Script name"
             className="w-full truncate rounded-md bg-transparent text-lg font-extrabold tracking-tight text-[var(--text-1)] focus:bg-[var(--surface-1)] focus:outline-none"
           />
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-4)]">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--text-4)]">
             {selectedRow?.is_default ? (
               <>
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--ok)]" />
@@ -301,7 +301,7 @@ function ScriptsInner() {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && !dirty && (
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-[var(--ok)]">
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--ok)]">
               <Check size={12} /> Saved
             </span>
           )}
@@ -309,7 +309,7 @@ function ScriptsInner() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || !detail}
             title="Upload a .txt, .md, or .docx and let AI reshape it into this script"
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-2 text-[12px] font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-2 text-[11px] font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--surface-1)] disabled:opacity-40"
           >
             {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
             {uploading ? "Reformatting…" : "Upload & reformat"}
@@ -317,7 +317,7 @@ function ScriptsInner() {
           <button
             onClick={save}
             disabled={!dirty || saving}
-            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[12px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[11px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
             Save changes
@@ -337,7 +337,7 @@ function ScriptsInner() {
                 setAdding((v) => !v);
                 setError(null);
               }}
-              className="flex items-center gap-1 text-[11px] font-bold text-[var(--accent)] hover:underline"
+              className="flex items-center gap-1 text-[10px] font-bold text-[var(--accent)] hover:underline"
             >
               {adding ? <X size={12} /> : <Plus size={12} />}
               {adding ? "Cancel" : "New"}
@@ -349,7 +349,7 @@ function ScriptsInner() {
               <select
                 value={newBiz}
                 onChange={(e) => setNewBiz(e.target.value)}
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--panel-bg)] px-2 py-1.5 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--panel-bg)] px-2 py-1.5 text-[11px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
               >
                 {businesses.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -362,12 +362,12 @@ function ScriptsInner() {
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createScript()}
                 placeholder="Script name"
-                className="mt-2 w-full rounded-md border border-[var(--border-strong)] bg-[var(--panel-bg)] px-2 py-1.5 text-[12px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
+                className="mt-2 w-full rounded-md border border-[var(--border-strong)] bg-[var(--panel-bg)] px-2 py-1.5 text-[11px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none"
               />
               <button
                 onClick={createScript}
                 disabled={creating || !newName.trim() || !newBiz}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--accent)] py-1.5 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--accent)] py-1.5 text-[11px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] disabled:opacity-40"
               >
                 {creating ? <Loader2 size={12} className="animate-spin" /> : "Create script"}
               </button>
@@ -384,7 +384,7 @@ function ScriptsInner() {
             >
               <span className="flex items-center gap-1.5">
                 <span
-                  className={`truncate text-[13px] font-bold ${
+                  className={`truncate text-[12px] font-bold ${
                     s.id === selectedId ? "text-[var(--accent)]" : "text-[var(--text-2)]"
                   }`}
                 >
@@ -394,7 +394,7 @@ function ScriptsInner() {
                   <Star size={10} className="flex-shrink-0 text-[var(--warn)]" fill="currentColor" />
                 )}
               </span>
-              <span className="mt-0.5 block truncate text-[11px] text-[var(--text-4)]">
+              <span className="mt-0.5 block truncate text-[10px] text-[var(--text-4)]">
                 {s.business_name}
               </span>
             </button>
@@ -408,13 +408,13 @@ function ScriptsInner() {
         {/* Editor */}
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-[var(--border)] px-4 py-2.5 md:px-6">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">
               Instructions
             </p>
           </div>
 
           {error && (
-            <p className="mx-4 mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)] md:mx-6">
+            <p className="mx-4 mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)] md:mx-6">
               {error}
             </p>
           )}
@@ -425,10 +425,10 @@ function ScriptsInner() {
             spellCheck={false}
             aria-label="Script instructions"
             placeholder="Describe the persona, the facts the agent may state, and the rules it must never break… or use “Upload & reformat” to build it from a file."
-            className="min-h-[320px] flex-1 resize-none bg-transparent px-4 py-4 font-mono text-[13px] leading-relaxed text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:px-6"
+            className="min-h-[320px] flex-1 resize-none bg-transparent px-4 py-4 font-mono text-[12px] leading-relaxed text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:px-6"
           />
 
-          <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--text-5)] md:px-6">
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-2.5 text-[10px] text-[var(--text-5)] md:px-6">
             <span>
               {words.toLocaleString()} word{words === 1 ? "" : "s"} ·{" "}
               {chars.toLocaleString()} character{chars === 1 ? "" : "s"}

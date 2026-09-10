@@ -134,7 +134,7 @@ export default function DashboardPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-5 md:h-full md:min-h-0 md:overflow-hidden md:px-8 md:py-6">
       <div className="flex-shrink-0">
         <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Overview</h1>
-        <p className="text-[13px] text-[var(--text-4)]">This month, across your connected accounts.</p>
+        <p className="text-[12px] text-[var(--text-4)]">This month, across your connected accounts.</p>
       </div>
 
       {loading ? (
@@ -144,12 +144,12 @@ export default function DashboardPage() {
           {/* Things that need attention come first */}
           {atRisk.length > 0 && (
             <div className="flex-shrink-0 rounded-xl border border-[var(--danger)]/25 bg-[var(--danger-soft)] p-3">
-              <p className="flex items-center gap-2 text-[13px] font-bold text-[var(--danger)]">
+              <p className="flex items-center gap-2 text-[12px] font-bold text-[var(--danger)]">
                 <AlertTriangle size={14} />
                 {atRisk.length} account{atRisk.length === 1 ? "" : "s"} need attention
               </p>
               {atRisk.map((t) => (
-                <p key={t.username} className="mt-1 text-[11px] text-[var(--text-4)]">
+                <p key={t.username} className="mt-1 text-[10px] text-[var(--text-4)]">
                   @{t.username} — {tokenAge(t.token_expires_at).label}. Instagram tokens last ~60
                   days; the daily refresh job renews them.
                 </p>
@@ -159,13 +159,13 @@ export default function DashboardPage() {
 
           {pending && pending.businesses + pending.accounts > 0 && (
             <div className="flex flex-shrink-0 items-center justify-between gap-3 rounded-xl border border-[var(--warn)]/25 bg-[var(--warn-soft)] p-3">
-              <p className="text-[13px] font-semibold text-[var(--warn)]">
+              <p className="text-[12px] font-semibold text-[var(--warn)]">
                 {pending.businesses} business{pending.businesses === 1 ? "" : "es"} and{" "}
                 {pending.accounts} account{pending.accounts === 1 ? "" : "s"} awaiting approval
               </p>
               <Link
                 href="/admin"
-                className="flex-shrink-0 text-[11px] font-semibold text-[var(--text-3)] hover:text-[var(--text-1)]"
+                className="flex-shrink-0 text-[10px] font-semibold text-[var(--text-3)] hover:text-[var(--text-1)]"
               >
                 Review →
               </Link>
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                 />
               </div>
               {used >= cap && (
-                <p className="mt-2 text-[11px] font-semibold text-[var(--danger)]">
+                <p className="mt-2 text-[10px] font-semibold text-[var(--danger)]">
                   Monthly limit reached — auto-replies are paused until the period resets.
                 </p>
               )}
@@ -221,8 +221,8 @@ export default function DashboardPage() {
             <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
               <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[15px] font-bold text-[var(--text-1)]">Message volume</h2>
-                  <p className="text-[12px] text-[var(--text-4)]">
+                  <h2 className="text-[14px] font-bold text-[var(--text-1)]">Message volume</h2>
+                  <p className="text-[11px] text-[var(--text-4)]">
                     Messages in and out, across your accounts
                   </p>
                 </div>
@@ -231,7 +231,7 @@ export default function DashboardPage() {
                     <button
                       key={d}
                       onClick={() => setDays(d)}
-                      className={`rounded-md px-3 py-1 text-[11px] font-bold transition-colors ${
+                      className={`rounded-md px-3 py-1 text-[10px] font-bold transition-colors ${
                         days === d
                           ? "bg-[var(--accent)] text-[var(--accent-fg)]"
                           : "text-[var(--text-4)] hover:text-[var(--text-2)]"
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                   volume.accounts.map((acc) => (
                     <div key={acc.account_id}>
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[12px] font-bold text-[var(--text-1)]">
+                        <span className="truncate text-[11px] font-bold text-[var(--text-1)]">
                           {accountName(acc.account_id)}
                         </span>
                         <span className="flex-shrink-0 text-[10px] text-[var(--text-5)]">
@@ -264,7 +264,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       {acc.total === 0 ? (
-                        <p className="py-4 text-center text-[11px] text-[var(--text-5)]">
+                        <p className="py-4 text-center text-[10px] text-[var(--text-5)]">
                           No messages in the last {volume.days} days
                         </p>
                       ) : (
@@ -282,8 +282,8 @@ export default function DashboardPage() {
                 on a short screen rather than pushing the page past the viewport. */}
             {accountStats.length > 0 && (
               <div className="flex min-h-0 flex-col">
-                <h2 className="flex-shrink-0 text-[15px] font-bold text-[var(--text-1)]">By account</h2>
-                <p className="flex-shrink-0 text-[12px] text-[var(--text-4)]">
+                <h2 className="flex-shrink-0 text-[14px] font-bold text-[var(--text-1)]">By account</h2>
+                <p className="flex-shrink-0 text-[11px] text-[var(--text-4)]">
                   All-time totals per connected Instagram account
                 </p>
                 <div className="mt-3 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto">
@@ -294,11 +294,11 @@ export default function DashboardPage() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="truncate text-[14px] font-bold text-[var(--text-1)]">
+                          <p className="truncate text-[13px] font-bold text-[var(--text-1)]">
                             {s.username ? `@${s.username}` : s.name || "Account"}
                           </p>
                           {s.name && s.username && (
-                            <p className="truncate text-[11px] text-[var(--text-4)]">{s.name}</p>
+                            <p className="truncate text-[10px] text-[var(--text-4)]">{s.name}</p>
                           )}
                         </div>
                         <StatusPill status={s.status} />
@@ -319,7 +319,7 @@ export default function DashboardPage() {
                       </div>
                       <Link
                         href={`/orders?account=${s.account_id}`}
-                        className="mt-3 inline-block text-[11px] font-bold text-[var(--accent)] hover:underline"
+                        className="mt-3 inline-block text-[10px] font-bold text-[var(--accent)] hover:underline"
                       >
                         View orders &amp; reservations →
                       </Link>
@@ -351,9 +351,9 @@ function Stat({
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
         <Icon size={15} className="text-[var(--accent)]" />
       </div>
-      <p className="mt-2.5 text-[11px] font-bold uppercase tracking-wide text-[var(--text-5)]">{label}</p>
+      <p className="mt-2.5 text-[10px] font-bold uppercase tracking-wide text-[var(--text-5)]">{label}</p>
       <p className="mt-0.5 text-xl font-extrabold tracking-tight text-[var(--text-1)]">{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-[var(--text-4)]">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[10px] text-[var(--text-4)]">{sub}</p>}
     </div>
   );
 }

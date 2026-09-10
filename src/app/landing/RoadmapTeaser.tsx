@@ -14,7 +14,7 @@ export default function RoadmapTeaser() {
           <h2 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">
             What&apos;s next
           </h2>
-          <p className="mx-auto mt-2 max-w-md text-[13px] text-[var(--text-4)]">
+          <p className="mx-auto mt-2 max-w-md text-[12px] text-[var(--text-4)]">
             Instagram is where we started. Here&apos;s what we&apos;re building toward.
           </p>
 
@@ -22,7 +22,7 @@ export default function RoadmapTeaser() {
             {UPCOMING.map((u) => (
               <span
                 key={u.title}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-2 text-[12.5px] font-semibold text-[var(--text-3)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-2 text-[11.5px] font-semibold text-[var(--text-3)]"
               >
                 <u.icon size={14} strokeWidth={2.2} />
                 {u.title}

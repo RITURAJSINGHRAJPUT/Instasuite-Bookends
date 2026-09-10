@@ -18,7 +18,7 @@ function Bubble({ from, children }: { from: "guest" | "agent"; children: string 
   return (
     <div className={`flex ${isGuest ? "justify-start" : "justify-end"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed ${
+        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-[11.5px] leading-relaxed ${
           isGuest
             ? "rounded-tl-sm border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)]"
             : "rounded-tr-sm text-white"
@@ -38,7 +38,7 @@ export default function InboxMockup() {
         <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]/60" />
         <span className="h-2.5 w-2.5 rounded-full bg-[var(--warn)]/60" />
         <span className="h-2.5 w-2.5 rounded-full bg-[var(--ok)]/60" />
-        <span className="ml-2 text-[11px] font-bold text-[var(--text-4)]">Inbox</span>
+        <span className="ml-2 text-[10px] font-bold text-[var(--text-4)]">Inbox</span>
       </div>
 
       <div className="space-y-3 p-4">

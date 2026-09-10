@@ -46,6 +46,20 @@ const fmt = (iso: string | null) =>
 // admin's row still labels/describes correctly.
 const ASSIGNABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter((o) => o.role !== "super_admin");
 
+// The list's columns. Only the first carries a width: the table is `table-auto`, so a long
+// email would otherwise take as much room as it likes and leave the five columns after it
+// fighting over what's left. Capping it here (with `max-w-0` + `truncate` on the matching
+// cell) holds the layout steady whatever the address length — the full address is a click
+// away in the detail panel.
+const COLUMNS: { label: string; className?: string }[] = [
+  { label: "User", className: "w-[26%]" },
+  { label: "Role" },
+  { label: "Plan" },
+  { label: "Tenancy" },
+  { label: "Last sign-in" },
+  { label: "This month" },
+];
+
 export default function UsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -217,7 +231,7 @@ export default function UsersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Users</h1>
-          <p className="text-[13px] text-[var(--text-4)]">
+          <p className="text-[12px] text-[var(--text-4)]">
             {users.length} account{users.length === 1 ? "" : "s"} · {superAdmins} super admin
             {superAdmins === 1 ? "" : "s"}
           </p>
@@ -228,7 +242,7 @@ export default function UsersPage() {
             setCreated(null);
             setError(null);
           }}
-          className="flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3.5 py-2 text-[13px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
+          className="flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3.5 py-2 text-[12px] font-bold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
         >
           <UserPlus size={14} />
           Add user
@@ -236,7 +250,7 @@ export default function UsersPage() {
       </div>
 
       {error && (
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error}
         </p>
@@ -249,17 +263,17 @@ export default function UsersPage() {
           persisted or re-displayed. */}
       {created && (
         <div className="mt-4 rounded-xl border border-[var(--ok)]/25 bg-[var(--ok-soft)] p-4">
-          <p className="text-[13px] font-bold text-[var(--ok)]">Created {created.email}</p>
+          <p className="text-[12px] font-bold text-[var(--ok)]">Created {created.email}</p>
           {created.emailed ? (
             // "Sent" means the mail provider accepted it, not that it landed in an
             // inbox — so point at spam rather than promising delivery.
-            <p className="mt-1 text-[11px] text-[var(--text-4)]">
+            <p className="mt-1 text-[10px] text-[var(--text-4)]">
               We&apos;ve emailed them a link to set their password. It expires in about an
               hour — worth telling them to check spam if it doesn&apos;t show up.
             </p>
           ) : created.setup_link ? (
             <>
-              <p className="mt-1 text-[11px] text-[var(--text-4)]">
+              <p className="mt-1 text-[10px] text-[var(--text-4)]">
                 {created.note ?? "Couldn't email them."} Send this one-time link instead —
                 it isn&apos;t stored, so copy it now.
               </p>
@@ -268,7 +282,7 @@ export default function UsersPage() {
                   readOnly
                   value={created.setup_link}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[11px] text-[var(--text-2)]"
+                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[10px] text-[var(--text-2)]"
                 />
                 <button
                   onClick={() => {
@@ -276,7 +290,7 @@ export default function UsersPage() {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}
-                  className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+                  className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-[11px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
                   {copied ? "Copied" : "Copy"}
@@ -284,11 +298,11 @@ export default function UsersPage() {
               </div>
             </>
           ) : (
-            <p className="mt-1 text-[11px] text-[var(--text-4)]">{created.note}</p>
+            <p className="mt-1 text-[10px] text-[var(--text-4)]">{created.note}</p>
           )}
           <button
             onClick={() => setCreated(null)}
-            className="mt-2.5 text-[11px] font-semibold text-[var(--text-4)] hover:text-[var(--text-2)]"
+            className="mt-2.5 text-[10px] font-semibold text-[var(--text-4)] hover:text-[var(--text-2)]"
           >
             Dismiss
           </button>
@@ -299,7 +313,7 @@ export default function UsersPage() {
       {adding && (
         <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-[13px] font-bold text-[var(--text-1)]">New user</h2>
+            <h2 className="text-[12px] font-bold text-[var(--text-1)]">New user</h2>
             <button onClick={() => setAdding(false)} aria-label="Cancel" className="text-[var(--text-5)] hover:text-[var(--text-2)]">
               <X size={15} />
             </button>
@@ -311,12 +325,12 @@ export default function UsersPage() {
               onKeyDown={(e) => e.key === "Enter" && createUser()}
               type="email"
               placeholder="them@business.com"
-              className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-[13px]"
+              className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-[12px]"
             />
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
-              className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[13px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
+              className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
             >
               {ASSIGNABLE_ROLE_OPTIONS.map((o) => (
                 <option key={o.role} value={o.role}>
@@ -329,7 +343,7 @@ export default function UsersPage() {
               <select
                 value={newPlan}
                 onChange={(e) => setNewPlan(e.target.value)}
-                className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[13px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
+                className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none"
               >
                 {plans.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -338,17 +352,17 @@ export default function UsersPage() {
                 ))}
               </select>
             ) : (
-              <div className="flex items-center px-3 py-2 text-[12px] text-[var(--text-5)]">No plan needed</div>
+              <div className="flex items-center px-3 py-2 text-[11px] text-[var(--text-5)]">No plan needed</div>
             )}
             <button
               onClick={createUser}
               disabled={busy || !newEmail.trim() || (needsSubscription(newRole) && !newPlan)}
-              className="flex items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] disabled:opacity-40"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] disabled:opacity-40"
             >
               {busy ? <Loader2 size={13} className="animate-spin" /> : "Create"}
             </button>
           </div>
-          <p className="mt-2 text-[11px] text-[var(--text-5)]">
+          <p className="mt-2 text-[10px] text-[var(--text-5)]">
             {ROLE_OPTIONS.find((o) => o.role === newRole)?.description} · No password is set —
             they&apos;re emailed a link to choose one.
           </p>
@@ -361,9 +375,12 @@ export default function UsersPage() {
           <table className="w-full min-w-[680px]">
             <thead>
               <tr className="border-b border-[var(--border)] text-left">
-                {["User", "Role", "Plan", "Tenancy", "Last sign-in", "This month"].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">
-                    {h}
+                {COLUMNS.map((c) => (
+                  <th
+                    key={c.label}
+                    className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)] ${c.className ?? ""}`}
+                  >
+                    {c.label}
                   </th>
                 ))}
               </tr>
@@ -377,29 +394,31 @@ export default function UsersPage() {
                     u.id === selected ? "bg-[var(--accent-soft)]" : ""
                   }`}
                 >
-                  <td className="px-4 py-3">
-                    <p className="text-[13px] font-bold text-[var(--text-1)]">
-                      {u.email}
-                      {u.is_self && <span className="ml-1.5 text-[10px] font-semibold text-[var(--text-5)]">you</span>}
-                    </p>
-                    <p className="text-[11px] text-[var(--text-5)]">joined {fmt(u.created_at)}</p>
+                  <td className="max-w-0 px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[12px] font-bold text-[var(--text-1)]">{u.email}</span>
+                      {u.is_self && (
+                        <span className="flex-shrink-0 text-[10px] font-semibold text-[var(--text-5)]">you</span>
+                      )}
+                    </div>
+                    <p className="truncate text-[10px] text-[var(--text-5)]">joined {fmt(u.created_at)}</p>
                   </td>
                   <td className="px-4 py-3">
                     <RolePill role={u.role} />
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-[12px] font-semibold text-[var(--text-2)]">
+                    <p className="text-[11px] font-semibold text-[var(--text-2)]">
                       {u.subscription?.plan_name ?? "—"}
                     </p>
                     {u.subscription && <SubPill status={u.subscription.status} />}
                   </td>
-                  <td className="px-4 py-3 text-[12px] text-[var(--text-3)]">
+                  <td className="px-4 py-3 text-[11px] text-[var(--text-3)]">
                     {u.counts.businesses} biz · {u.counts.accounts} acct
                   </td>
-                  <td className="px-4 py-3 text-[12px] text-[var(--text-3)]">
+                  <td className="px-4 py-3 text-[11px] text-[var(--text-3)]">
                     {u.last_sign_in_at ? fmt(u.last_sign_in_at) : <span className="text-[var(--warn)]">never</span>}
                   </td>
-                  <td className="px-4 py-3 text-[12px] text-[var(--text-3)]">
+                  <td className="px-4 py-3 text-[11px] text-[var(--text-3)]">
                     {u.usage.messages} · ${(u.usage.costCents / 100).toFixed(2)}
                   </td>
                 </tr>
@@ -414,8 +433,8 @@ export default function UsersPage() {
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-[15px] font-bold text-[var(--text-1)]">{detail.email}</h2>
-              <p className="text-[11px] text-[var(--text-4)]">
+              <h2 className="text-[14px] font-bold text-[var(--text-1)]">{detail.email}</h2>
+              <p className="text-[10px] text-[var(--text-4)]">
                 {detail.email_confirmed_at ? "Email confirmed" : "Email not confirmed"} · joined{" "}
                 {fmt(detail.created_at)} · last sign-in{" "}
                 {detail.last_sign_in_at ? fmt(detail.last_sign_in_at) : "never"}
@@ -434,7 +453,7 @@ export default function UsersPage() {
                   value={detail.role}
                   disabled={busy || detail.is_self}
                   onChange={(e) => mutate(detail.id, { role: e.target.value })}
-                  className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-40"
+                  className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-40"
                 >
                   {/* super_admin isn't assignable here, but if this row already IS
                       one (only possible for its own disabled row — is_self blocks
@@ -459,13 +478,13 @@ export default function UsersPage() {
               {/* Plan applies to client tenants only — staff aren't metered. */}
               <Field label="Plan">
                 {isStaff(detail.role) ? (
-                  <span className="text-[12px] text-[var(--text-5)]">Not metered (staff)</span>
+                  <span className="text-[11px] text-[var(--text-5)]">Not metered (staff)</span>
                 ) : (
                   <select
                     value={plans.find((p) => p.name === detail.subscription?.plan_name)?.id ?? ""}
                     disabled={busy}
                     onChange={(e) => mutate(detail.id, { plan_id: e.target.value })}
-                    className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-40"
+                    className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--text-2)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-40"
                   >
                     <option value="" disabled>
                       No plan
@@ -480,7 +499,7 @@ export default function UsersPage() {
               </Field>
 
               <Field label="Spend this month">
-                <span className="text-[12px] font-bold text-[var(--text-2)]">
+                <span className="text-[11px] font-bold text-[var(--text-2)]">
                   {detail.usage.messages} replies · ${(detail.usage.costCents / 100).toFixed(2)}
                 </span>
               </Field>
@@ -492,16 +511,16 @@ export default function UsersPage() {
                 Businesses &amp; accounts
               </p>
               {detail.businesses.length === 0 ? (
-                <p className="mt-2 text-[12px] text-[var(--text-4)]">None yet.</p>
+                <p className="mt-2 text-[11px] text-[var(--text-4)]">None yet.</p>
               ) : (
                 <div className="mt-2 space-y-2">
                   {detail.businesses.map((b) => (
                     <div key={b.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
-                      <p className="text-[12px] font-bold text-[var(--text-1)]">
+                      <p className="text-[11px] font-bold text-[var(--text-1)]">
                         {b.name} <span className="text-[10px] font-semibold text-[var(--text-5)]">{b.status}</span>
                       </p>
                       {b.accounts.map((a) => (
-                        <p key={a.id} className="mt-0.5 text-[11px] text-[var(--text-4)]">
+                        <p key={a.id} className="mt-0.5 text-[10px] text-[var(--text-4)]">
                           @{a.username ?? "?"} · {a.status} ·{" "}
                           <span className={tokenAge(a.token_expires_at).cls}>
                             {tokenAge(a.token_expires_at).label}
@@ -520,7 +539,7 @@ export default function UsersPage() {
               token). Password sign-in involves no redirect, so it works today. */}
           {tempPass?.userId === detail.id && (
             <div className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)] p-3">
-              <p className="text-[11px] text-[var(--text-3)]">
+              <p className="text-[10px] text-[var(--text-3)]">
                 Temporary password for <span className="font-bold">{detail.email}</span>. It has{" "}
                 <span className="font-bold">replaced their old password</span>, is shown here{" "}
                 <span className="font-bold">once</span>, and they&apos;ll be required to choose
@@ -531,7 +550,7 @@ export default function UsersPage() {
                   readOnly
                   value={tempPass.password}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[13px] tracking-wide text-[var(--text-1)]"
+                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[12px] tracking-wide text-[var(--text-1)]"
                 />
                 <button
                   onClick={() => {
@@ -539,7 +558,7 @@ export default function UsersPage() {
                     setLinkCopied(true);
                     setTimeout(() => setLinkCopied(false), 1500);
                   }}
-                  className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+                  className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-[11px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
                 >
                   {linkCopied ? <Check size={13} /> : <Copy size={13} />}
                   {linkCopied ? "Copied" : "Copy"}
@@ -554,7 +573,7 @@ export default function UsersPage() {
               onClick={() => makeTempPassword(detail.id)}
               disabled={linking}
               title="Replace their password with a temporary one they must change on sign-in"
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-bold text-[var(--text-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-[11px] font-bold text-[var(--text-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
             >
               {linking ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
               Generate temp password
@@ -563,7 +582,7 @@ export default function UsersPage() {
               <button
                 onClick={() => mutate(detail.id, { subscription_status: "active" })}
                 disabled={busy}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--ok)]/30 px-3 py-1.5 text-[12px] font-bold text-[var(--ok)] hover:bg-[var(--ok-soft)] disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--ok)]/30 px-3 py-1.5 text-[11px] font-bold text-[var(--ok)] hover:bg-[var(--ok-soft)] disabled:opacity-40"
               >
                 <PlayCircle size={13} />
                 Reactivate
@@ -572,7 +591,7 @@ export default function UsersPage() {
               <button
                 onClick={() => mutate(detail.id, { subscription_status: "canceled" })}
                 disabled={busy || !detail.subscription}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--warn)]/30 px-3 py-1.5 text-[12px] font-bold text-[var(--warn)] hover:bg-[var(--warn-soft)] disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--warn)]/30 px-3 py-1.5 text-[11px] font-bold text-[var(--warn)] hover:bg-[var(--warn-soft)] disabled:opacity-40"
               >
                 <PauseCircle size={13} />
                 Suspend
@@ -588,7 +607,7 @@ export default function UsersPage() {
                 setError(null);
               }}
               disabled={busy || detail.is_self}
-              className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold text-[var(--text-4)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] disabled:opacity-30"
+              className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold text-[var(--text-4)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] disabled:opacity-30"
             >
               <Trash2 size={13} />
               Delete
@@ -611,13 +630,13 @@ export default function UsersPage() {
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--danger-soft)]">
                 <Trash2 size={15} className="text-[var(--danger)]" />
               </div>
-              <h3 className="text-[14px] font-bold text-[var(--text-1)]">Delete {deleteTarget.email}?</h3>
+              <h3 className="text-[13px] font-bold text-[var(--text-1)]">Delete {deleteTarget.email}?</h3>
             </div>
 
             <p className="mt-3 text-xs leading-relaxed text-[var(--text-4)]">
               This permanently deletes their account and everything under it:
             </p>
-            <ul className="mt-2 space-y-1 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+            <ul className="mt-2 space-y-1 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
               <li>{deleteTarget.counts.businesses} business{deleteTarget.counts.businesses === 1 ? "" : "es"}</li>
               <li>
                 {deleteTarget.counts.accounts} Instagram account
@@ -625,18 +644,18 @@ export default function UsersPage() {
               </li>
               <li>every conversation and message they hold</li>
             </ul>
-            <p className="mt-2 text-[11px] text-[var(--text-5)]">
+            <p className="mt-2 text-[10px] text-[var(--text-5)]">
               Their billing history stays, but stops being attributable to them. This can&apos;t be undone.
             </p>
 
-            <label className="mt-4 block text-[11px] font-semibold text-[var(--text-4)]">
+            <label className="mt-4 block text-[10px] font-semibold text-[var(--text-4)]">
               Type <span className="font-mono text-[var(--text-2)]">{deleteTarget.email}</span> to confirm
             </label>
             <input
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
               autoComplete="off"
-              className="mt-1.5 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[13px] text-[var(--text-1)] focus:border-[var(--danger)] focus:outline-none"
+              className="mt-1.5 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2 text-[12px] text-[var(--text-1)] focus:border-[var(--danger)] focus:outline-none"
             />
 
             <div className="mt-4 flex justify-end gap-2">
@@ -666,7 +685,7 @@ export default function UsersPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[11px] font-semibold text-[var(--text-4)]">{label}</span>
+      <span className="text-[10px] font-semibold text-[var(--text-4)]">{label}</span>
       {children}
     </div>
   );

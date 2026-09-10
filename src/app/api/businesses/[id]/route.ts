@@ -19,8 +19,17 @@ export async function PATCH(
   // { status: "approved" } and approve themselves, bypassing the super-admin
   // gate entirely. `name` and `default_script_id` are client-editable; status
   // changes go through /api/admin/* which is super_admin-only.
-  const patch: { name?: string; default_script_id?: string; public_handle?: string | null } = {};
+  const patch: {
+    name?: string;
+    default_script_id?: string;
+    public_handle?: string | null;
+    takeaway_enabled?: boolean;
+  } = {};
   if (typeof body?.name === "string" && body.name.trim()) patch.name = body.name.trim();
+  // Whether this brand takes takeaway at all. Beshak is dine-in only. Read by tenant.ts
+  // into the system prompt AND enforced in the webhook, so turning it off here genuinely
+  // stops takeaway orders rather than just asking the model nicely.
+  if (typeof body?.takeaway_enabled === "boolean") patch.takeaway_enabled = body.takeaway_enabled;
   // Public @handle to tag in feedback DMs. An empty string clears it back to null.
   if (typeof body?.public_handle === "string") patch.public_handle = body.public_handle.trim() || null;
 

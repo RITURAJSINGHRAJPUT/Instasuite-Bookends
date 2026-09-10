@@ -15,13 +15,16 @@ type Blocked = {
   created_at: string;
 };
 
+// The 16px is load-bearing, not a style choice: iOS Safari auto-zooms any focused
+// input whose text is smaller, so this must NOT follow the rest of the type scale
+// down. `md:` drops it once we're past the phone breakpoint, where zoom can't fire.
 const INPUT =
-  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-base text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
+  "rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:border-[var(--accent)] focus:outline-none md:text-sm";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-5)]">{label}</p>
       {children}
     </div>
   );
@@ -75,7 +78,7 @@ export default function BlockedPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-8">
       <h1 className="text-xl font-extrabold tracking-tight text-[var(--text-1)]">Blocked</h1>
-      <p className="text-[13px] text-[var(--text-4)]">
+      <p className="text-[12px] text-[var(--text-4)]">
         Usernames the AI never replies to. A block applies to{" "}
         <span className="font-semibold text-[var(--text-2)]">every connected account</span> — their
         messages still appear in the Inbox, they just get no automatic answer. You can still reply
@@ -86,7 +89,7 @@ export default function BlockedPage() {
         <div className="flex flex-col gap-3">
           <Field label="Instagram username">
             <div className="flex items-center gap-2">
-              <span className="text-[15px] font-bold text-[var(--text-5)]">@</span>
+              <span className="text-[14px] font-bold text-[var(--text-5)]">@</span>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -123,7 +126,7 @@ export default function BlockedPage() {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--danger)]">
           <AlertTriangle size={13} className="mt-px flex-shrink-0" />
           {error}
         </p>
@@ -134,8 +137,8 @@ export default function BlockedPage() {
       {!loading && rows.length === 0 && (
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] py-10 text-center">
           <UserX size={20} className="mx-auto text-[var(--text-5)]" />
-          <p className="mt-2 text-[12px] font-bold text-[var(--text-1)]">No one is blocked</p>
-          <p className="mt-0.5 text-[11px] text-[var(--text-4)]">
+          <p className="mt-2 text-[11px] font-bold text-[var(--text-1)]">No one is blocked</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-4)]">
             Add a username above to stop the AI replying to them.
           </p>
         </div>
@@ -148,8 +151,8 @@ export default function BlockedPage() {
             className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3"
           >
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-[var(--text-1)]">@{r.username}</p>
-              <p className="mt-0.5 truncate text-[11px] text-[var(--text-4)]">
+              <p className="truncate text-[12px] font-semibold text-[var(--text-1)]">@{r.username}</p>
+              <p className="mt-0.5 truncate text-[10px] text-[var(--text-4)]">
                 {r.reason || "No reason given"}
                 {r.created_by_email && (
                   <span className="text-[var(--text-5)]"> · added by {r.created_by_email}</span>
