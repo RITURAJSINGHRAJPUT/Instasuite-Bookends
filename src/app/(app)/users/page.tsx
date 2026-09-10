@@ -13,6 +13,7 @@ import {
   PlayCircle,
   X,
   AlertTriangle,
+  KeyRound,
 } from "lucide-react";
 import { tokenAge } from "@/lib/token-age";
 import { ROLE_OPTIONS, needsSubscription, isStaff } from "@/lib/permissions";
@@ -65,6 +66,28 @@ export default function UsersPage() {
     note: string | null;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // An on-demand setup link for an EXISTING user. Held only in memory and only for the
+  // row it was minted for — it sets a password, so it is a credential: never persisted,
+  // never re-displayed after the panel closes.
+  const [setupLink, setSetupLink] = useState<{ userId: string; link: string } | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  async function makeSetupLink(userId: string) {
+    setLinking(true);
+    setError(null);
+    setSetupLink(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/setup-link`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) setError(d?.error || "Couldn't generate a setup link.");
+      else setSetupLink({ userId, link: d.setup_link });
+    } catch {
+      setError("Couldn't reach the server.");
+    }
+    setLinking(false);
+  }
 
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
   const [confirmText, setConfirmText] = useState("");
@@ -492,8 +515,51 @@ export default function UsersPage() {
             </div>
           </div>
 
+          {/* A fresh password-setup link, on demand.
+              Recovery tokens are single-use and last about an hour, and mail scanners
+              routinely spend them on delivery — so "we emailed it" is not a reliable way
+              to onboard anyone. This hands the link over directly instead. */}
+          {setupLink?.userId === detail.id && (
+            <div className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)] p-3">
+              <p className="text-[11px] text-[var(--text-3)]">
+                One-time link for <span className="font-bold">{detail.email}</span>. It expires
+                in about an hour and <span className="font-bold">cancels any earlier link</span>,
+                including one they were emailed — so send them this one. It isn&apos;t stored,
+                so copy it now.
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <input
+                  readOnly
+                  value={setupLink.link}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[11px] text-[var(--text-2)]"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(setupLink.link);
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 1500);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-[12px] font-bold text-[var(--accent-fg)] hover:bg-[var(--accent-hover)]"
+                >
+                  {linkCopied ? <Check size={13} /> : <Copy size={13} />}
+                  {linkCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
+            <button
+              onClick={() => makeSetupLink(detail.id)}
+              disabled={linking}
+              title="Generate a link they can use to set their password"
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-bold text-[var(--text-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+            >
+              {linking ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
+              Copy setup link
+            </button>
             {detail.subscription?.status === "canceled" ? (
               <button
                 onClick={() => mutate(detail.id, { subscription_status: "active" })}
