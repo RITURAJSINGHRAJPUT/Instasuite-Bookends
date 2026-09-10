@@ -67,22 +67,22 @@ export default function UsersPage() {
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // An on-demand setup link for an EXISTING user. Held only in memory and only for the
-  // row it was minted for — it sets a password, so it is a credential: never persisted,
-  // never re-displayed after the panel closes.
-  const [setupLink, setSetupLink] = useState<{ userId: string; link: string } | null>(null);
+  // A temporary password for an EXISTING user. Held only in memory and only for the row it
+  // was minted for — it IS a credential: never persisted, never re-displayed once the panel
+  // closes. Recovery links can't be used instead; see the route for why.
+  const [tempPass, setTempPass] = useState<{ userId: string; password: string } | null>(null);
   const [linking, setLinking] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  async function makeSetupLink(userId: string) {
+  async function makeTempPassword(userId: string) {
     setLinking(true);
     setError(null);
-    setSetupLink(null);
+    setTempPass(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}/setup-link`, { method: "POST" });
+      const res = await fetch(`/api/admin/users/${userId}/temp-password`, { method: "POST" });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) setError(d?.error || "Couldn't generate a setup link.");
-      else setSetupLink({ userId, link: d.setup_link });
+      if (!res.ok) setError(d?.error || "Couldn't set a temporary password.");
+      else setTempPass({ userId, password: d.temp_password });
     } catch {
       setError("Couldn't reach the server.");
     }
@@ -515,28 +515,27 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {/* A fresh password-setup link, on demand.
-              Recovery tokens are single-use and last about an hour, and mail scanners
-              routinely spend them on delivery — so "we emailed it" is not a reliable way
-              to onboard anyone. This hands the link over directly instead. */}
-          {setupLink?.userId === detail.id && (
+          {/* A temporary password, because recovery links are currently dead end-to-end
+              (Supabase's redirect allowlist rewrites them to the site root, spending the
+              token). Password sign-in involves no redirect, so it works today. */}
+          {tempPass?.userId === detail.id && (
             <div className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)] p-3">
               <p className="text-[11px] text-[var(--text-3)]">
-                One-time link for <span className="font-bold">{detail.email}</span>. It expires
-                in about an hour and <span className="font-bold">cancels any earlier link</span>,
-                including one they were emailed — so send them this one. It isn&apos;t stored,
-                so copy it now.
+                Temporary password for <span className="font-bold">{detail.email}</span>. It has{" "}
+                <span className="font-bold">replaced their old password</span>, is shown here{" "}
+                <span className="font-bold">once</span>, and they&apos;ll be required to choose
+                their own the moment they sign in. Send it to them and copy it now.
               </p>
               <div className="mt-2.5 flex gap-2">
                 <input
                   readOnly
-                  value={setupLink.link}
+                  value={tempPass.password}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[11px] text-[var(--text-2)]"
+                  className="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--panel-bg)] px-3 py-2 font-mono text-[13px] tracking-wide text-[var(--text-1)]"
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(setupLink.link);
+                    navigator.clipboard.writeText(tempPass.password);
                     setLinkCopied(true);
                     setTimeout(() => setLinkCopied(false), 1500);
                   }}
@@ -552,13 +551,13 @@ export default function UsersPage() {
           {/* Actions */}
           <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
             <button
-              onClick={() => makeSetupLink(detail.id)}
+              onClick={() => makeTempPassword(detail.id)}
               disabled={linking}
-              title="Generate a link they can use to set their password"
+              title="Replace their password with a temporary one they must change on sign-in"
               className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-[12px] font-bold text-[var(--text-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
             >
               {linking ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
-              Copy setup link
+              Generate temp password
             </button>
             {detail.subscription?.status === "canceled" ? (
               <button

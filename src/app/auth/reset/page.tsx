@@ -97,7 +97,13 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     setError(null);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    // `data` maps to user_metadata, so the new password and the cleared flag land in ONE
+    // call — they can't half-succeed and strand the user in the proxy's redirect loop.
+    // Harmless for someone who arrived by a normal reset link and never had the flag.
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: { must_change_password: false },
+    });
     if (updateError) {
       setError(updateError.message);
       setLoading(false);

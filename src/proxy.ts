@@ -35,6 +35,20 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // A temp password issued from /users (see api/admin/users/[id]/temp-password) marks the
+  // account must_change_password. Until they replace it, every page lands on /auth/reset —
+  // which already works for a signed-in user with no token in the URL, and sits OUTSIDE the
+  // matcher below, so it can't redirect to itself. The flag clears itself when the password
+  // is updated there.
+  //
+  // Page loads only. /api/ is deliberately NOT gated: the reset page talks to Supabase
+  // directly rather than through our API, so blocking it buys nothing and would break the
+  // shell they're being sent away from. This flag is password hygiene, not an authorization
+  // boundary — do not start treating it as one.
+  if (user?.user_metadata?.must_change_password && !request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.redirect(new URL("/auth/reset", request.url));
+  }
+
   if (user) return response;
 
   // Not authenticated. API calls get a clean 401; page loads redirect to login.
