@@ -704,11 +704,24 @@ async function findOrCreateConversation(account: ResolvedAccount, igsid: string)
   const profile = await fetchInstagramProfile(igsid, account.accessToken);
 
   if (existing) {
-    await supabaseAdmin
-      .from("instagram_conversations")
-      .update(profile)
-      .eq("id", existing.id);
-    return { ...existing, ...profile };
+    // Only write back the fields Instagram actually returned.
+    //
+    // fetchInstagramProfile swallows every failure and answers all-nulls by design, so it
+    // can never block a reply. Spreading that straight into an UPDATE meant one bad lookup
+    // ERASED a name we already had, and the chat silently reverted to the bare 16-digit
+    // igsid the list falls back to. Transient timeouts did it, and so did the permanent
+    // "User consent is required to access user profile" (code 230) refusal, which recurs
+    // on every single message from that guest.
+    //
+    // Strict `== null` rather than a falsy check: follower_count 0 and a false
+    // is_user_follow_business are real values worth storing.
+    const fresh = Object.fromEntries(
+      Object.entries(profile).filter(([, v]) => v != null)
+    );
+    if (Object.keys(fresh).length) {
+      await supabaseAdmin.from("instagram_conversations").update(fresh).eq("id", existing.id);
+    }
+    return { ...existing, ...fresh };
   }
 
   const { data: created, error } = await supabaseAdmin
