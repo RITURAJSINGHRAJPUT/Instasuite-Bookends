@@ -319,12 +319,30 @@ export default function AccountInbox({
 
   const renderConvRow = (convo: ConversationWithLastMessage) => {
     const isSelected = selectedId === convo.id;
+
+    // This guest has been told "someone from our team will confirm shortly" and is now
+    // waiting on a human to press Confirm. Nothing else in the list distinguishes that
+    // from an ordinary chat, and two guests once sat in it for 25 hours — past their own
+    // reservation times — because no one noticed.
+    //
+    // Keyed on the ORDER's status rather than human_handoff_reason: the reason is wiped
+    // the moment staff hand the chat back to the AI, which would un-tint the row while
+    // the guest is still waiting. The order status is the fact, and Confirm is what
+    // changes it.
+    const awaitingConfirm = convo.order?.status === "pending";
+
     return (
       <button
         key={convo.id}
         onClick={() => setSelectedId(convo.id)}
         className={`relative w-full px-4 py-3.5 text-left transition-colors ${
-          isSelected ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--surface-1)]"
+          awaitingConfirm
+            ? // Deliberately survives selection: the accent bar below already marks which
+              // row is open, so opening a chat shouldn't erase the reason you opened it.
+              "bg-[var(--danger-soft)] hover:bg-[var(--danger)]/15"
+            : isSelected
+              ? "bg-[var(--accent-soft)]"
+              : "hover:bg-[var(--surface-1)]"
         }`}
       >
         {isSelected && <div className="absolute left-0 top-0 h-full w-0.5 bg-[var(--accent)]" />}
