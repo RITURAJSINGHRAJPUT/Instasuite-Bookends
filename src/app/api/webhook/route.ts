@@ -23,6 +23,7 @@ import {
   dedupeKey,
   refersToPastOrder,
 } from "@/lib/order-detect";
+import { isClosedOn } from "@/lib/closed-days";
 import {
   parseIncomingMedia,
   hasMedia,
@@ -421,6 +422,29 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
         .update({ mode: "human", human_handoff_reason: "review" })
         .eq("id", conversation.id);
       return;
+    }
+
+    // The outlet is shut that day, but the model booked it anyway. Same two-sided treatment as
+    // takeaway above: closedDaysBlock states the rule in the prompt, and this is what makes it
+    // true. It has to sit HERE, before the send at the bottom of this function — captureOrder runs
+    // after the DM has already gone out, so a check down there would reject an order the guest has
+    // just been told is in hand.
+    //
+    // detected.scheduledAt is null when the AI never pinned an absolute date (parseAbsDate refuses
+    // "today"/"Saturday" on purpose); isClosedOn answers false for that rather than guessing, so a
+    // dateless handoff passes through as it does today.
+    if (detected) {
+      if (await isClosedOn(account.businessId, detected.scheduledAt, detected.outlet)) {
+        console.warn(
+          `Model booked a ${detected.kind} on a closed day for @${account.username} (${detected.scheduledAt}) — discarding.`
+        );
+        await recordUsage(account, ai);
+        await supabaseAdmin
+          .from("instagram_conversations")
+          .update({ mode: "human", human_handoff_reason: "closed_day" })
+          .eq("id", conversation.id);
+        return;
+      }
     }
 
     if (detectedReview?.category === "collaboration") {

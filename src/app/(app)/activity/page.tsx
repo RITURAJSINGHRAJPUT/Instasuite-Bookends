@@ -53,6 +53,8 @@ const ACTION_LABEL: Record<string, string> = {
   "unavailable.dish_remove": "Restored dish",
   "unavailable.outlet_close": "Closed outlet",
   "unavailable.outlet_reopen": "Reopened outlet",
+  "unavailable.closed_day_add": "Added a closed day",
+  "unavailable.closed_day_remove": "Removed a closed day",
   "user.create": "Created user",
   "user.delete": "Deleted user",
   "user.update": "Edited user",

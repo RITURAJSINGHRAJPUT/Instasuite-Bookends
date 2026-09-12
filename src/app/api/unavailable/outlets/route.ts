@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getContext } from "@/lib/ownership";
 import { can, isStaff } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { fromIstDateStart, fromIstDateEnd, fromIstDateTime } from "@/lib/ist";
 
 // Closed-outlet closures — sibling of /api/unavailable (which handles 86'd dishes). Same ownership,
 // scoping, and IST-window logic; the difference is `outlet` is required and there's no `dish`.
@@ -85,8 +86,11 @@ export async function POST(request: NextRequest) {
   const businessId = String(body?.business_id ?? "");
   const outlet = String(body?.outlet ?? "").trim();
   const note = String(body?.note ?? "").trim() || null;
-  const scope = String(body?.scope ?? "today"); // "today" | "custom" | "open"
+  const scope = String(body?.scope ?? "today"); // "today" | "custom" | "dates" | "open"
   const until = body?.until ? String(body.until) : null;
+  // "dates" scope only: an IST calendar range from <input type="date">.
+  const fromDate = body?.from_date ? String(body.from_date) : null;
+  const toDate = body?.to_date ? String(body.to_date) : null;
 
   if (!businessId) return Response.json({ error: "business_id is required" }, { status: 400 });
   if (!outlet) return Response.json({ error: "An outlet name is required" }, { status: 400 });
@@ -94,21 +98,35 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  let startsAt: string | null = null; // null => the DB default now()
   let endsAt: string | null;
   if (scope === "open") {
     endsAt = null;
+  } else if (scope === "dates") {
+    // A date range on the OUTLET's calendar. `from` may be in the future — this is the only scope
+    // that sets starts_at, which is what makes a closure schedulable ahead of time rather than
+    // always beginning the moment it is saved.
+    if (!fromDate) return Response.json({ error: "A start date is required" }, { status: 400 });
+    startsAt = fromIstDateStart(fromDate);
+    endsAt = fromIstDateEnd(toDate || fromDate); // one date given => that single day
+    if (!startsAt || !endsAt) return Response.json({ error: "Invalid date" }, { status: 400 });
+    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+      return Response.json({ error: "The end date must not be before the start date." }, { status: 400 });
+    }
   } else if (scope === "custom") {
     if (!until) return Response.json({ error: "A custom end time is required" }, { status: 400 });
-    const d = new Date(until);
-    if (isNaN(d.getTime())) return Response.json({ error: "Invalid end time" }, { status: 400 });
-    endsAt = d.toISOString();
+    // `until` is an IST wall-clock from a datetime-local input. It used to go through
+    // `new Date(until)`, which reads it in the BROWSER's zone — so an operator working from
+    // anywhere but India silently set the wrong end time.
+    endsAt = fromIstDateTime(until);
+    if (!endsAt) return Response.json({ error: "Invalid end time" }, { status: 400 });
   } else {
     endsAt = endOfIstDay().toISOString(); // "today"
   }
 
   const { data, error } = await supabaseAdmin
     .from("unavailable_outlets")
-    .insert({ business_id: businessId, outlet, note, ends_at: endsAt })
+    .insert({ business_id: businessId, outlet, note, ends_at: endsAt, ...(startsAt ? { starts_at: startsAt } : {}) })
     .select("id, business_id, outlet, note, starts_at, ends_at, created_at")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptSecret } from "@/lib/crypto";
 import { getUnavailableBlock } from "@/lib/availability";
+import { closedDaysBlock } from "@/lib/closed-days";
 
 // Resolves an inbound webhook to the tenant that owns it.
 // Server-only: it decrypts an access token, which must never reach the browser.
@@ -115,13 +116,21 @@ export async function resolveAccountByIgId(
   // function would return null, and EVERY account would go silent. On its own side path it
   // degrades to "takeaway allowed" instead — the pre-migration status quo. Runs in parallel,
   // so it costs no extra latency.
-  const [unavailable, takeawayEnabled] = await Promise.all([
+  // closedDaysBlock joins this side path for the same reason as takeaway_enabled: it reads a table
+  // that only exists after migration 0028, and it returns "" on any error, so a deploy that lands
+  // ahead of the migration degrades to "no closed days" instead of taking every account silent.
+  const [unavailable, closedDays, takeawayEnabled] = await Promise.all([
     getUnavailableBlock(data.business_id),
+    closedDaysBlock(data.business_id),
     getTakeawayEnabled(data.business_id),
   ]);
 
   const dineInOnly = takeawayEnabled ? "" : DINE_IN_ONLY_BLOCK;
-  const prompt = [script.content, unavailable, dineInOnly].filter(Boolean).join("\n\n");
+  // Closed days sit after the "closed right now" block and before dine-in-only: both are
+  // overrides, and the later one wins on the rare occasions they could disagree.
+  const prompt = [script.content, unavailable, closedDays, dineInOnly]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     accountId: data.id,

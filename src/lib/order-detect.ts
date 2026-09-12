@@ -22,6 +22,8 @@ export type DetectedOrder = {
   line: string;
   /** Guest name parsed from the line, if present. */
   customer: string | null;
+  /** The outlet named on the line, if present — matched against closure rules before capture. */
+  outlet: string | null;
   /** A clean, human-readable summary for the dashboard + confirmation message. */
   summary: string;
   /** The reservation/pickup time as a UTC ISO string (from the `At:` field), or null. */
@@ -163,7 +165,7 @@ export function detectHandoff(reply: string): DetectedOrder | null {
       ]
         .filter(Boolean)
         .join(" · ") || line.replace(/^RESERVATION\s*\|?\s*/i, "").trim();
-    return { kind: "reservation", line, customer: f["name"] || null, summary, scheduledAt: parseIstToUtc(f["at"]) ?? deriveScheduledAt("reservation", f) };
+    return { kind: "reservation", line, customer: f["name"] || null, outlet: f["outlet"] || null, summary, scheduledAt: parseIstToUtc(f["at"]) ?? deriveScheduledAt("reservation", f) };
   }
 
   const t = reply.match(TAKEAWAY_RE);
@@ -179,7 +181,7 @@ export function detectHandoff(reply: string): DetectedOrder | null {
       ]
         .filter(Boolean)
         .join(" · ") || line.replace(/^TAKEAWAY\s*\|?\s*/i, "").trim();
-    return { kind: "takeaway", line, customer: f["name"] || null, summary, scheduledAt: parseIstToUtc(f["at"]) ?? deriveScheduledAt("takeaway", f) };
+    return { kind: "takeaway", line, customer: f["name"] || null, outlet: f["outlet"] || null, summary, scheduledAt: parseIstToUtc(f["at"]) ?? deriveScheduledAt("takeaway", f) };
   }
 
   return null;
