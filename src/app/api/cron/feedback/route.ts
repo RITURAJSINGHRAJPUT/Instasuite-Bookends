@@ -68,6 +68,23 @@ export async function POST(request: NextRequest) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
+  // Guests who asked to cancel must never be thanked for dining. On 11 Sep a guest sent a
+  // cancellation request at 15:25 and got "thank you for dining with us!" at 17:19, because
+  // nothing in this route knew the request existed.
+  //
+  // One query for the whole run rather than one per row — same set-building shape as
+  // /api/orders. Deliberately NOT filtered to status 'pending', unlike that route: it
+  // surfaces open work, whereas the question here is "did this guest ever ask to cancel?"
+  // That 11 Sep request was already marked completed when the DM went out, and a resolved
+  // request is still a reason not to send one.
+  const { data: cancelReqs } = await supabaseAdmin
+    .from("review_items")
+    .select("conversation_id")
+    .eq("category", "cancellation");
+  const cancelRequested = new Set(
+    (cancelReqs ?? []).map((r) => r.conversation_id).filter(Boolean)
+  );
+
   const results: { order: string; ok: boolean; detail: string }[] = [];
   // One thank-you per guest, not per row. Duplicate order rows for the same conversation used to
   // each earn their own DM, so a guest could be thanked three times for one booking. Capture at
@@ -81,6 +98,17 @@ export async function POST(request: NextRequest) {
     try {
       if (!row.igsid || !row.instagram_account_id) {
         results.push({ order: row.id, ok: false, detail: "no recipient snapshot" });
+        continue;
+      }
+
+      // This guest asked to cancel. Thanking them for dining would be, at best, tone-deaf.
+      // Stamped rather than merely skipped, or every future run reconsiders the same row.
+      if (row.conversation_id && cancelRequested.has(row.conversation_id)) {
+        await supabaseAdmin
+          .from("orders")
+          .update({ feedback_sent_at: new Date().toISOString() })
+          .eq("id", row.id);
+        results.push({ order: row.id, ok: false, detail: "skipped: cancellation was requested" });
         continue;
       }
 

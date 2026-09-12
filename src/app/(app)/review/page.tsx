@@ -12,6 +12,7 @@ import {
   Loader2,
   MessagesSquare,
   Send,
+  Ban,
 } from "lucide-react";
 import { COLLAB_DECLINE, COLLAB_DECLINE_LABEL } from "@/lib/review-responses";
 
@@ -95,6 +96,17 @@ function ReviewInner() {
   // so it must never be one click away from sending a collab reply to a complaint —
   // the first click only reveals the message for staff to read.
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Per-action failure. `failed` above only covers the initial load; cancelling can fail for
+  // a reason staff must see (no booking attached to the chat), and a silent no-op reads as a
+  // broken button. Mirrors actionError on the Orders page.
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Opening a different item clears any failure left over from the last one — otherwise
+  // "no booking on this chat" follows staff onto an unrelated request.
+  const openItem = (r: ReviewItem | null) => {
+    setActionError(null);
+    setSelected(r);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -205,6 +217,28 @@ function ReviewInner() {
     }
   }
 
+  // Cancel the guest's booking AND message them, in one click — the mirror of Confirm on
+  // the Orders page. Unlike sendDecline this reports failure: the route legitimately 422s
+  // when the chat has no booking attached, and staff need to see that rather than watch
+  // nothing happen.
+  async function cancelBooking(id: string) {
+    setWorking(id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/review/${id}/cancel-order`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data?.error || "Couldn't cancel that booking.");
+        return;
+      }
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, status: "completed" } : r)));
+      setSelected((sel) => (sel && sel.id === id ? { ...sel, status: "completed" } : sel));
+    } finally {
+      setWorking(null);
+      load();
+    }
+  }
+
   // Distinct accounts present in the data, for the filter dropdown.
   const accounts = useMemo(() => {
     const seen = new Map<string, string>();
@@ -284,7 +318,7 @@ function ReviewInner() {
           title="Needs review"
           rows={pending}
           empty="Nothing waiting on review."
-          onOpen={setSelected}
+          onOpen={openItem}
           onResolve={markReviewed}
           working={working}
         />
@@ -293,7 +327,7 @@ function ReviewInner() {
           title="Reviewed"
           rows={reviewed}
           empty="No reviewed items yet."
-          onOpen={setSelected}
+          onOpen={openItem}
           onResolve={markReviewed}
           working={working}
         />
@@ -342,7 +376,7 @@ function ReviewInner() {
             {/* Confirm step: the exact text that will be sent, shown before anything
                 goes out. The button is available on every category, so staff read
                 what they're about to send rather than trusting the label. */}
-            {confirming === selected.id && (
+            {confirming === selected.id && selected.category !== "cancellation" && (
               <div className="mt-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent)]">
                   This message will be sent to {selected.customer_name || "the guest"}
@@ -374,6 +408,13 @@ function ReviewInner() {
               </div>
             )}
 
+            {actionError && (
+              <p className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--danger)]">
+                <AlertTriangle size={13} className="mt-px flex-shrink-0" />
+                {actionError}
+              </p>
+            )}
+
             <div className="mt-4 flex items-center gap-2">
               {/* Straight to the thread. This used to be a bare "/inbox", which landed staff
                   on an empty Inbox to hunt for the chat by hand — at exactly the moment a
@@ -389,14 +430,32 @@ function ReviewInner() {
               )}
               {selected.status === "pending" ? (
                 <>
-                  {confirming !== selected.id && (
+                  {/* A cancellation request needs the opposite of a collab decline. Without
+                      this, the only action on offer here would have sent a guest asking to
+                      cancel a message about collaborations. */}
+                  {selected.category === "cancellation" ? (
                     <button
-                      onClick={() => setConfirming(selected.id)}
+                      onClick={() => cancelBooking(selected.id)}
                       disabled={working === selected.id}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)] disabled:opacity-40"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--danger)]/30 px-4 py-2.5 text-sm font-bold text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-40"
                     >
-                      <Send size={14} /> {COLLAB_DECLINE_LABEL}
+                      {working === selected.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Ban size={14} />
+                      )}
+                      Cancel booking &amp; message guest
                     </button>
+                  ) : (
+                    confirming !== selected.id && (
+                      <button
+                        onClick={() => setConfirming(selected.id)}
+                        disabled={working === selected.id}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-bold text-[var(--text-2)] transition-colors hover:bg-[var(--panel-bg)] disabled:opacity-40"
+                      >
+                        <Send size={14} /> {COLLAB_DECLINE_LABEL}
+                      </button>
+                    )
                   )}
                   <button
                     onClick={() => markReviewed(selected.id)}
