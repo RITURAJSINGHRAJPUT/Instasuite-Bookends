@@ -32,6 +32,7 @@ import {
   type Media,
 } from "@/lib/attachments";
 import { isBlocked } from "@/lib/blocklist";
+import { maybeSweepFeedback } from "@/lib/feedback-run";
 
 // The reply is generated in after() (see below), and on Vercel that background
 // work is bounded by THIS function's maxDuration — exceed it and the reply is
@@ -124,6 +125,16 @@ export async function POST(request: NextRequest) {
       after(() => withSlot(() => processMessage(igAccountId, messaging)));
     }
   }
+
+  // Post-dining thank-yous ride on real traffic rather than waiting for a scheduler. The
+  // Render cron that used to be their only trigger fired on 5 of 12 days, and a feedback DM
+  // is perishable — Instagram refuses anything more than 24h after the guest's last message —
+  // so a missed day doesn't delay the message, it loses it. One guest's was due Saturday
+  // afternoon and was still unsent when staff clicked it on Sunday evening, 39h later.
+  //
+  // Self-throttling to once every few minutes and capped per run, so it's a no-op on almost
+  // every webhook. In after() and never throwing, so it cannot touch the guest's own reply.
+  after(() => maybeSweepFeedback());
 
   return Response.json({ status: "received" });
 }

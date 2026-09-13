@@ -91,3 +91,26 @@ services:
         sync: false
       - key: CRON_SECRET # MUST match the web service's CRON_SECRET
         sync: false
+
+  # -------- the nightly hand-back-to-AI cron --------
+  # 18:30 UTC = 00:00 IST, so each day starts with every parked chat back on the AI.
+  # Skips only chats parked for a flagged review — a complaint or collab someone is
+  # mid-way through answering shouldn't be taken over overnight. See the route.
+  #
+  # Deliberately NOT mirrored onto the webhook the way the feedback sweep is: a missed
+  # night costs nothing (the Inbox's "All back to AI" button still exists), whereas a
+  # missed feedback DM expires with Instagram's 24h window and is gone.
+  - type: cron
+    name: instasuite-handback
+    runtime: node
+    plan: starter
+    schedule: "30 18 * * *"
+    buildCommand: ""
+    startCommand: >
+      curl -fsS -X POST "$APP_URL/api/cron/handback"
+      -H "Authorization: Bearer $CRON_SECRET"
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: CRON_SECRET # MUST match the web service's CRON_SECRET
+        sync: false
