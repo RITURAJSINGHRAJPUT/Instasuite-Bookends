@@ -36,26 +36,20 @@ export type Media = {
 // rather than vanishing — we can fold it in properly once we've seen a real one.
 const TYPE_MAP: Record<string, MediaKind> = {
   story_mention: "story_mention",
+  // Meta also sends `ig_story`. Listed here so it is LABELLED correctly; the webhook no
+  // longer depends on that, because it declines to reply to any attachment at all rather
+  // than trying to recognise which ones are stories — a bet this table kept losing.
+  ig_story: "story_mention",
   share: "post",
+  // Likewise `ig_post`: 6 shared posts were reading to the model as a generic
+  // "attachment" rather than "shared a post".
+  ig_post: "post",
   ig_reel: "reel",
   reel: "reel",
   image: "image",
   video: "video",
   audio: "audio",
 };
-
-// A reply to OUR story, or a mention of us in THEIRS. Kept here beside the MediaKind
-// union that defines them rather than re-derived at the call site — "what counts as a
-// story" is this module's business.
-//
-// Deliberately excludes post/reel/image: sharing a reel into the DMs is a normal
-// conversational move and still gets answered. Only story events are the dead end.
-const STORY_KINDS: ReadonlySet<MediaKind> = new Set<MediaKind>(["story_reply", "story_mention"]);
-
-/** True when the message is a story interaction — which the webhook never auto-replies to. */
-export function isStoryMedia(media: Media[]): boolean {
-  return media.some((m) => STORY_KINDS.has(m.kind));
-}
 
 const str = (v: unknown): string | null =>
   typeof v === "string" && v.trim() ? v.trim() : null;

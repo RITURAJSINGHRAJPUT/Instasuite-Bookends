@@ -24,13 +24,7 @@ import {
   refersToPastOrder,
 } from "@/lib/order-detect";
 import { isClosedOn } from "@/lib/closed-days";
-import {
-  parseIncomingMedia,
-  hasMedia,
-  describeMedia,
-  isStoryMedia,
-  type Media,
-} from "@/lib/attachments";
+import { parseIncomingMedia, hasMedia, describeMedia, type Media } from "@/lib/attachments";
 import { isBlocked } from "@/lib/blocklist";
 import { maybeSweepFeedback } from "@/lib/feedback-run";
 
@@ -190,18 +184,25 @@ async function processMessage(igAccountId: string, messaging: Messaging) {
 
     if (conversation.mode === "human") return;
 
-    // Story interactions are never answered — not a reply to our story, not a mention of
-    // us in someone else's. This used to be the opposite: media-bearing messages were
-    // routed to the AI on the theory that a 😍 against a story is real engagement. Five
-    // days of traffic said otherwise — 53 story events, 46 of them with no text at all,
-    // and of the 7 that had text, 4 were bare emoji. Three were real questions and none
-    // was a booking. So the old rule bought three content questions at the price of ~50
-    // AI calls into a dead end, and made the account look like it chats back at every
-    // sticker. Staff still see all of it in the Inbox and can answer by hand.
+    // ANY attachment ends the turn. Not a word back — no story reply, no story mention,
+    // no shared post or reel, no photo, and nothing from the `template` /
+    // `unsupported_type` shapes Meta sends for media it won't hand over at all.
     //
-    // Shared posts and reels are NOT covered (see isStoryMedia) — sending a reel into
-    // the DMs is a real conversational move and still gets a reply.
-    if (isStoryMedia(media)) return;
+    // This started narrower (stories only) and kept leaking, because each rule was a bet
+    // on knowing Meta's type names: `ig_story` wasn't in the table, so a guest got "thank
+    // you for sharing! 🤍" for a story we'd promised never to answer. The blanket rule
+    // can't leak — it asks whether there is media, not what kind.
+    //
+    // The cost is close to zero, measured rather than assumed: of 238 inbound media
+    // messages, 208 carried no text whatsoever, and 29 of the 30 that did were story
+    // replies (already silent). Exactly ONE non-story attachment in the whole history
+    // ever carried a real question. Against that, the agent was answering ~83 of these —
+    // mostly "I'm not able to view attachments", twice in a row to the same guest.
+    //
+    // The message is still stored and still shows in the Inbox, so staff can answer by
+    // hand; and a LATER text-only message still gets a reply, with describeMedia putting
+    // "[sent a photo]" in the history so the model knows what was referred to.
+    if (media.length) return;
 
     // A bare emoji is not a question, wherever it lands in the thread. It used to
     // count as a "no intent opener", so a guest who opened with just 👋 got the whole
