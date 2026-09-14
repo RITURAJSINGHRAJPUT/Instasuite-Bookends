@@ -174,10 +174,17 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
   // Desktop only — collapses to an icon rail, it never disappears. `open` above is
-  // the separate mobile drawer. Not persisted: this component lives in the (app)
-  // layout and never remounts, so the choice survives navigating between pages,
-  // and a fresh load starts expanded.
+  // the separate mobile drawer.
+  //
+  // Persisted per device, because springing back open on every refresh is the one case
+  // navigation-only memory never covered. It starts false and is restored on mount rather
+  // than from a lazy initializer: the (app) pages are server-rendered with the sidebar
+  // expanded, and the two states are structurally different markup (see renderBody), so
+  // reading storage during the first render would disagree with the server HTML and trip a
+  // hydration mismatch. One frame in the wrong state is the price, and `mounted` below is
+  // what keeps that frame from being a visible 150ms slide.
   const [collapsed, setCollapsed] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
@@ -292,6 +299,28 @@ export default function Sidebar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  // Restore the saved choice after the first render — see the note on `collapsed` for why
+  // this can't be a lazy initializer. `mounted` flips in the same pass, which is what turns
+  // the correction into a snap instead of a 150ms slide (see the aside's className).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("sidebar") === "collapsed") setCollapsed(true);
+    } catch {
+      // ignore (private mode / storage disabled) — the sidebar just won't remember
+    }
+    setMounted(true);
+  }, []);
+
+  // The ONLY way collapsed changes, so state and storage can't drift apart.
+  function applyCollapsed(next: boolean) {
+    setCollapsed(next);
+    try {
+      localStorage.setItem("sidebar", next ? "collapsed" : "expanded");
+    } catch {
+      // ignore (private mode / storage disabled)
+    }
+  }
+
   function toggleTheme() {
     const next = dark ? "light" : "dark";
     setDark(!dark);
@@ -353,7 +382,7 @@ export default function Sidebar() {
           // beneath it was two adjacent controls doing related jobs. It carries the
           // same hover tooltip as the nav icons so the affordance isn't a secret.
           <button
-            onClick={() => setCollapsed(false)}
+            onClick={() => applyCollapsed(false)}
             aria-label="Expand sidebar"
             aria-expanded={false}
             className="group relative rounded-xl transition-opacity hover:opacity-80"
@@ -372,7 +401,7 @@ export default function Sidebar() {
             <Logo size="sm" subtitle="AI Agent Admin" />
             {/* md:flex keeps this out of the mobile drawer, which closes with its own X. */}
             <button
-              onClick={() => setCollapsed(true)}
+              onClick={() => applyCollapsed(true)}
               aria-label="Collapse sidebar"
               aria-expanded
               title="Collapse sidebar"
@@ -590,9 +619,13 @@ export default function Sidebar() {
           it, so it carries its own expand control and page content simply reflows
           against a 72px column. */}
       <aside
-        className={`hidden flex-shrink-0 flex-col border-r border-[var(--border)] transition-[width] duration-150 md:flex ${
-          collapsed ? "w-[72px]" : "w-[232px]"
-        }`}
+        // The transition is withheld until after mount on purpose. The saved state is
+        // applied in an effect, so with it always on, every single page load would play a
+        // 232px -> 72px slide — far more distracting than the one frame it's correcting.
+        // User-initiated toggles happen after mount and still animate normally.
+        className={`hidden flex-shrink-0 flex-col border-r border-[var(--border)] md:flex ${
+          mounted ? "transition-[width] duration-150" : ""
+        } ${collapsed ? "w-[72px]" : "w-[232px]"}`}
         style={{ background: "var(--sidebar-bg)" }}
       >
         {renderBody(collapsed)}
