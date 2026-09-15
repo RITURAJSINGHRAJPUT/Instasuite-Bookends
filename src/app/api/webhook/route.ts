@@ -24,6 +24,7 @@ import {
   refersToPastOrder,
 } from "@/lib/order-detect";
 import { isClosedOn } from "@/lib/closed-days";
+import { isOutletUnavailable } from "@/lib/availability";
 import { parseIncomingMedia, hasMedia, describeMedia, type Media } from "@/lib/attachments";
 import { isBlocked } from "@/lib/blocklist";
 import { maybeSweepFeedback } from "@/lib/feedback-run";
@@ -446,6 +447,23 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // "today"/"Saturday" on purpose); isClosedOn answers false for that rather than guessing, so a
     // dateless handoff passes through as it does today.
     if (detected) {
+      // TWO closure systems, and until now only one of them was enforced. `closed_days` is the
+      // standing "every Tuesday / this date" rule that isClosedOn covers. The Unavailable tab
+      // writes somewhere else entirely — `unavailable_outlets`, a "shut right now until X"
+      // window — and that had nothing behind it but the prompt. Hence Piplod being offered,
+      // confirmed, and only stopped by a colleague typing "Piplod is closed today".
+      if (await isOutletUnavailable(account.businessId, detected.outlet, detected.scheduledAt)) {
+        console.warn(
+          `Model booked a ${detected.kind} at a closed outlet for @${account.username} (${detected.outlet}) — discarding.`
+        );
+        await recordUsage(account, ai);
+        await supabaseAdmin
+          .from("instagram_conversations")
+          .update({ mode: "human", human_handoff_reason: "closed_day" })
+          .eq("id", conversation.id);
+        return;
+      }
+
       if (await isClosedOn(account.businessId, detected.scheduledAt, detected.outlet)) {
         console.warn(
           `Model booked a ${detected.kind} on a closed day for @${account.username} (${detected.scheduledAt}) — discarding.`
