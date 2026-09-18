@@ -14,6 +14,7 @@ import {
   isNoIntentOpener,
   isTrivialAck,
   cannedWelcome,
+  pastTimeReply,
   mergeConsecutiveTurns,
 } from "@/lib/message-triage";
 import {
@@ -22,6 +23,7 @@ import {
   stripHandoff,
   dedupeKey,
   refersToPastOrder,
+  isPastBooking,
 } from "@/lib/order-detect";
 import { isClosedOn } from "@/lib/closed-days";
 import { isOutletUnavailable } from "@/lib/availability";
@@ -447,6 +449,24 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
     // "today"/"Saturday" on purpose); isClosedOn answers false for that rather than guessing, so a
     // dateless handoff passes through as it does today.
     if (detected) {
+      // A booking for a time that has already passed. First, because a time that doesn't exist
+      // yet is the most basic invalidity. On 18 Sep a guest typed "17th sep" meaning the 18th;
+      // the agent — which is handed today's date on every turn — called the 17th "tomorrow
+      // morning", the order was captured, and staff confirmed it 35 hours in the past.
+      //
+      // Deliberately NOT the human handoff the closure guards below use. Those are policy the
+      // guest can't change; this is a typo they fix in one message. So: discard the recap (it
+      // was built on the wrong date), capture nothing, send a plain "that's passed — when?",
+      // and stay in AI mode so their correction is answered and captured normally.
+      if (isPastBooking(detected.scheduledAt, Date.now())) {
+        console.warn(
+          `Model captured a ${detected.kind} in the past for @${account.username} (${detected.scheduledAt}) — asking for a new time.`
+        );
+        await recordUsage(account, ai);
+        await sendCannedReply(account, conversation.id, igsid, pastTimeReply(detected.kind));
+        return;
+      }
+
       // TWO closure systems, and until now only one of them was enforced. `closed_days` is the
       // standing "every Tuesday / this date" rule that isClosedOn covers. The Unavailable tab
       // writes somewhere else entirely — `unavailable_outlets`, a "shut right now until X"

@@ -92,6 +92,17 @@ export function cannedWelcome(businessName: string, takeawayEnabled: boolean): s
   return `${opener}Welcome to ${businessName} 👋 ${offer}`;
 }
 
+// Sent INSTEAD of the agent's recap when the booking it captured is already in the past (see
+// isPastBooking and its gate in the webhook). A past date is almost always a typo the guest fixes in
+// one message, so this asks rather than handing the chat to a human — unlike a closed outlet, which
+// is policy the guest can't change. Deterministic on purpose: the model's own recap was built on the
+// wrong date, and it once called yesterday "tomorrow".
+export function pastTimeReply(kind: "reservation" | "takeaway"): string {
+  return kind === "takeaway"
+    ? "Just to check — that pickup time has already passed. What time would you like to pick up?"
+    : "Just to check — that date and time has already passed. Which date and time would you like to book for?";
+}
+
 type Turn = { role: "user" | "assistant"; content: string };
 
 /**

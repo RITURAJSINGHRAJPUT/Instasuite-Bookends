@@ -239,3 +239,20 @@ export function refersToPastOrder(text: string): boolean {
   if (!text || !text.trim()) return false;
   return PAST_ORDER_RES.some((re) => re.test(text));
 }
+
+// A booking whose time has already passed. On 18 Sep a guest typed "17th sep" (meaning the 18th),
+// the agent recapped it as "a breakfast reservation for tomorrow morning" — about yesterday — and
+// the order was captured, confirmed and completed 35 hours in the past. The model is given the
+// current date on every turn and still did this, so the webhook checks it in code.
+//
+// The 15-minute grace is for "a table right now" / an ASAP pickup, which the agent writes as the
+// current minute; the capture lands seconds later and would otherwise refuse the keenest guests.
+// Null → false: a handoff with no pinned date can't be judged (same stance as isClosedOn).
+const PAST_GRACE_MS = 15 * 60 * 1000;
+
+export function isPastBooking(scheduledAtIso: string | null, nowMs: number): boolean {
+  if (!scheduledAtIso) return false;
+  const at = new Date(scheduledAtIso).getTime();
+  if (Number.isNaN(at)) return false;
+  return at < nowMs - PAST_GRACE_MS;
+}

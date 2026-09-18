@@ -56,6 +56,10 @@ const REPLY_GUARD = [
   // then lost its nerve and asked the guest to confirm a date they had just written — which meant
   // it never finished the recap, never emitted the hand-off line, and no order was ever captured.
   "Dates written in numbers are DAY first: 5/9/26 is 5 September 2026, not 9 May. Read a date the guest has given, apply it, and never ask them to re-confirm or re-state a date, time, name, contact or party size they have already written — even if their format was ambiguous or the booking is soon.",
+  // A guest typed "17th sep" on the 18th and the agent called it "tomorrow morning", and turned a bare
+  // "8:30" into 8:30 AM for what was a dinner booking. The webhook now refuses to capture a past booking
+  // (isPastBooking), but the model should never recap one in the first place.
+  "Before recapping a reservation or pickup, compare its date and time with the current date and time above. If it has already passed, don't recap it — say so and ask for a future date and time. A date earlier than today is almost always a typo: ask, never assume. If a time has no am/pm and both are possible that day, ask which.",
   "Keep every reply under 900 characters — Instagram rejects anything longer and the guest receives NOTHING. Never paste a long list of items: send the menu link, or name a few options and offer to say more.",
   "Once you have FINALIZED a reservation or takeaway earlier in this conversation (you confirmed it back to the guest and/or emitted its hand-off line), treat any LATER message as a fresh request and respond to what it actually asks — if they want another reservation or order, start collecting its details; otherwise just answer their question. Do NOT resume, re-confirm, or re-emit the hand-off for the finished order, and do NOT restart with a generic greeting (you have already greeted them). Only revisit a past order if the guest explicitly asks about it (to check or change it). You may reuse their name, contact and preferences, and emit a new hand-off line only when they actually place a new order.",
 ].join("\n");
