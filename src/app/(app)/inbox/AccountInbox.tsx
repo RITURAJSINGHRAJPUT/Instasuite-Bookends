@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -208,6 +208,24 @@ export default function AccountInbox({
   // Only true on a FIRST open of a chat — a cached one paints instantly with no spinner.
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [input, setInput] = useState("");
+
+  // Grow the reply box with its text, up to ~8 lines, then scroll inside it.
+  //
+  // Keyed on `input` rather than done in onChange, so it also shrinks back to one line when a
+  // send clears the box — otherwise it would sit tall and empty. A layout effect so the new
+  // height lands before paint; a plain effect makes the box jump a frame behind every line
+  // break. It writes a DOM style, not React state, so there is no re-render loop.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const COMPOSER_MAX_PX = 160;
+  useLayoutEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_PX)}px`;
+    el.style.overflowY = el.scrollHeight > COMPOSER_MAX_PX ? "auto" : "hidden";
+    // selectedId too: switching chats remounts the textarea, and a draft carried across would
+    // otherwise render one line tall until the next keystroke.
+  }, [input, selectedId]);
   const [sending, setSending] = useState(false);
   // Set when Instagram refused the reply (too long, 24h window closed, dead token).
   // The guest got nothing, so this has to be visible rather than swallowed.
@@ -916,7 +934,9 @@ export default function AccountInbox({
                     </button>
                   </div>
                 )}
-                <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 transition-colors focus-within:border-[var(--accent)]">
+                {/* items-end, not items-center: the reply box grows with its text, and the ⚡ and
+                    Send buttons belong beside the LAST line rather than floating mid-box. */}
+                <div className="flex items-end gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-1)] px-4 py-2 transition-colors focus-within:border-[var(--accent)]">
                   <button
                     onClick={toggleQuickReplies}
                     aria-label="Quick replies"
@@ -929,13 +949,27 @@ export default function AccountInbox({
                   >
                     <Zap size={15} />
                   </button>
-                  <input
-                    type="text"
+                  {/* A textarea, not an input: a single-line input scrolled long replies sideways,
+                      so the start of what you'd written vanished off the left edge. This one
+                      wraps and grows (see the layout effect on `input`), then scrolls inside
+                      itself past ~8 lines. 16px on mobile stops iOS zooming the page on tap.
+                      py-1.5 + leading keeps a single line at the buttons' 32px height. */}
+                  <textarea
+                    ref={composerRef}
+                    rows={1}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                    onKeyDown={(e) => {
+                      // Enter sends, Shift+Enter is a new line. preventDefault because a
+                      // textarea would otherwise ALSO insert the newline. And never while an
+                      // input method is composing — with a Hindi/Gujarati keyboard, Enter picks
+                      // the suggested word, and sending there would fire a half-typed reply.
+                      if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+                      e.preventDefault();
+                      handleSend();
+                    }}
                     placeholder={`Reply to ${selected.name?.split(" ")[0] || "customer"}…`}
-                    className="min-w-0 flex-1 bg-transparent text-[16px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:text-[12px]"
+                    className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[16px] leading-[20px] text-[var(--text-1)] placeholder:text-[var(--text-6)] focus:outline-none md:text-[12px]"
                   />
                   <button
                     onClick={handleSend}
