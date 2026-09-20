@@ -35,6 +35,68 @@ const DEFAULT_CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 // caller (see webhook), so "our team will get back to you" is truthful.
 const OUTAGE_MESSAGE = "Thanks for your message! Our team will get back to you shortly.";
 
+/** True if this text IS the holding message — lets the webhook avoid sending it to the same
+ *  guest twice during one outage. Compared here so the wording lives in exactly one place. */
+export function isHoldingMessage(text: string | null | undefined): boolean {
+  return (text ?? "").trim() === OUTAGE_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// Failure visibility + circuit breaker.
+//
+// On 20 Sep every reply stopped for over an hour and nobody could say why: the API was
+// answering "You have reached your specified API usage limits. You will regain access on
+// 2026-10-01", and the only trace of it was a console.warn on the server. Staff answered 62
+// messages by hand while each new guest got the same holding line. Two problems, both here:
+// the reason was invisible, and a hard stop was retried forever.
+//
+// In-process state, the same assumption debounce.ts and queue.ts already document (one
+// long-lived Render process). Worst case on a restart is one extra failed call.
+// ---------------------------------------------------------------------------
+
+/** How long to stop calling out after a HARD failure — long enough to stop hammering a
+ *  refusing API, short enough that recovery is picked up on its own. */
+const BREAKER_MS = 5 * 60 * 1000;
+
+let lastError: { message: string; at: number } | null = null;
+let breakerUntil = 0;
+
+export type AiStatus = {
+  ok: boolean;
+  /** The API's own words, e.g. the usage-limit message — what was missing before. */
+  error: string | null;
+  at: string | null;
+  /** When calls will be attempted again, while the breaker is open. */
+  retryAt: string | null;
+};
+
+export function getAiStatus(): AiStatus {
+  // Only report a failure that is still current: a blip an hour ago is not an outage.
+  const fresh = lastError && Date.now() - lastError.at < 15 * 60 * 1000;
+  return {
+    ok: !fresh,
+    error: fresh ? lastError!.message : null,
+    at: fresh ? new Date(lastError!.at).toISOString() : null,
+    retryAt: Date.now() < breakerUntil ? new Date(breakerUntil).toISOString() : null,
+  };
+}
+
+/**
+ * A failure that retrying cannot help: the usage cap, a revoked key, a model this account
+ * can't reach. 429 and 5xx are the opposite — transient, and the SDK already retries those,
+ * so they must NOT trip the breaker or a busy minute would mute the agent for five.
+ */
+function isHardFailure(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status === 400 || status === 401 || status === 403 || status === 404;
+}
+
+function describeError(err: unknown): string {
+  const e = err as { status?: number; error?: { error?: { message?: string } }; message?: string };
+  const detail = e?.error?.error?.message || e?.message || "Unknown error";
+  return e?.status ? `HTTP ${e.status}: ${detail}` : detail;
+}
+
 // Conversation-hygiene rules appended to EVERY tenant's system prompt. Without them a
 // model can treat each turn fresh — re-asking for details the guest already gave — or
 // narrate its reasoning; these pull it back toward tracking state and staying coherent.
@@ -96,6 +158,10 @@ export async function getAIResponse(
   while (history.length && history[0].role !== "user") history.shift();
   if (!history.length) return outageResult();
 
+  // The API told us it would refuse until a fixed date; calling it again every time a guest
+  // writes achieves nothing. Recovery needs no intervention — the breaker simply lapses.
+  if (Date.now() < breakerUntil) return outageResult();
+
   try {
     const res = await anthropic.messages.create({
       model: claudeModel,
@@ -132,11 +198,17 @@ export async function getAIResponse(
         unavailable: false,
       };
     }
+    // Counts as a failure for reporting: from the guest's side it is identical to an outage.
+    // Not a hard one, though — no breaker, since the next call may well succeed.
+    lastError = { message: "Claude returned no text", at: Date.now() };
     console.warn("Claude returned no text — serving a holding message.");
   } catch (err) {
     // Paused/invalid key, rate limit, outage, etc. No weak-model fallback: send a safe
     // holding message and let the caller hand the conversation to a human.
-    console.warn("Claude call failed — serving a holding message:", (err as Error).message);
+    const detail = describeError(err);
+    lastError = { message: detail, at: Date.now() };
+    if (isHardFailure(err)) breakerUntil = Date.now() + BREAKER_MS;
+    console.warn("Claude call failed — serving a holding message:", detail);
   }
 
   return outageResult();

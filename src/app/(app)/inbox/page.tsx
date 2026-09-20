@@ -63,6 +63,31 @@ function InboxInner() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [scripts, setScripts] = useState<ScriptRow[]>([]);
   const [accountError, setAccountError] = useState<string | null>(null);
+
+  // Whether the agent can actually reply, and why not. On 20 Sep every reply failed for over
+  // an hour — the API was answering "You have reached your specified API usage limits" — and
+  // the only trace was a server log. Staff kept answering by hand with no idea the agent was
+  // down. Polled rather than pushed: it is a once-a-minute question, not worth a socket.
+  const [aiDown, setAiDown] = useState<{ error: string; retryAt: string | null } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      try {
+        const res = await fetch("/api/ai-status");
+        if (!res.ok || !alive) return;
+        const d = await res.json();
+        setAiDown(d.ok ? null : { error: d.error, retryAt: d.retryAt });
+      } catch {
+        // A failed poll says nothing about the agent — leave the banner as it was.
+      }
+    };
+    check();
+    const t = setInterval(check, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
   const [activeAccount, setActiveAccount] = useState<string>("all");
   const [liveMessage, setLiveMessage] = useState<Message | null>(null);
 
@@ -201,6 +226,19 @@ function InboxInner() {
           </select>
         )}
       </div>
+
+      {/* The agent's own words from the API, not a generic "something went wrong" — the
+          difference between "raise the usage cap" and an hour of guessing. */}
+      {aiDown && (
+        <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2.5 text-[11px] text-[var(--danger)]">
+          <AlertTriangle size={14} className="mt-px flex-shrink-0" />
+          <span className="min-w-0">
+            <span className="font-bold">The agent can&apos;t reply right now.</span> Guests are
+            getting a holding message and their chats are going to staff.
+            <span className="mt-1 block font-mono text-[10px] opacity-90">{aiDown.error}</span>
+          </span>
+        </div>
+      )}
 
       {accountError && (
         <p className="mx-4 mt-3 flex items-start gap-1.5 rounded-lg bg-[var(--danger-soft)] px-2.5 py-2 text-[10px] font-semibold text-[var(--danger)]">

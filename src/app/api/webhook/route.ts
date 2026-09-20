@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { fetchInstagramProfile } from "@/lib/instagram";
 import { sendAndStore } from "@/lib/outbound";
-import { getAIResponse } from "@/lib/ai";
+import { getAIResponse, isHoldingMessage } from "@/lib/ai";
 import { resolveAccountByIgId, type ResolvedAccount } from "@/lib/tenant";
 import { checkMessageQuota } from "@/lib/usage";
 import { withSlot } from "@/lib/queue";
@@ -495,6 +495,19 @@ async function generateAndSendReply(igAccountId: string, conversationId: string)
           .eq("id", conversation.id);
         return;
       }
+    }
+
+    // The agent is down and this guest has ALREADY been told "our team will get back to you".
+    // Saying it again every time they write is worse than silence — on 20 Sep the API refused
+    // every call for over an hour, and each new message earned another copy. Hand the chat to a
+    // human (again, harmlessly) and say nothing.
+    const lastAssistant = [...rows].reverse().find((m) => m.role === "assistant")?.content;
+    if (ai.unavailable && isHoldingMessage(lastAssistant)) {
+      await supabaseAdmin
+        .from("instagram_conversations")
+        .update({ mode: "human", human_handoff_reason: "outage" })
+        .eq("id", conversation.id);
+      return;
     }
 
     if (detectedReview?.category === "collaboration") {
