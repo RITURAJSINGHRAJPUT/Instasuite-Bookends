@@ -189,6 +189,17 @@ export async function getAIResponse(
       .trim();
 
     if (text) {
+      // A reply just went through, so whatever was wrong no longer is. Without this,
+      // getAiStatus keeps reporting the old failure for its full 15-minute window and the
+      // Inbox banner tells staff to take over conversations the agent is already handling
+      // — which is exactly what happened once the usage cap was lifted on 20 Sep.
+      //
+      // Reaching here means the breaker was already closed (the guard above returns early
+      // otherwise), so zeroing it changes nothing today; it is here so the two can never
+      // drift apart if that guard is ever relaxed. Recovery still costs one breaker
+      // interval: no call is attempted while it is open, so nothing can clear this sooner.
+      lastError = null;
+      breakerUntil = 0;
       return {
         text,
         provider: "claude",

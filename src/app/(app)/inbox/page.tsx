@@ -68,7 +68,11 @@ function InboxInner() {
   // an hour — the API was answering "You have reached your specified API usage limits" — and
   // the only trace was a server log. Staff kept answering by hand with no idea the agent was
   // down. Polled rather than pushed: it is a once-a-minute question, not worth a socket.
-  const [aiDown, setAiDown] = useState<{ error: string; retryAt: string | null } | null>(null);
+  const [aiDown, setAiDown] = useState<{
+    error: string;
+    at: string | null;
+    retryAt: string | null;
+  } | null>(null);
   useEffect(() => {
     let alive = true;
     const check = async () => {
@@ -76,7 +80,7 @@ function InboxInner() {
         const res = await fetch("/api/ai-status");
         if (!res.ok || !alive) return;
         const d = await res.json();
-        setAiDown(d.ok ? null : { error: d.error, retryAt: d.retryAt });
+        setAiDown(d.ok ? null : { error: d.error, at: d.at, retryAt: d.retryAt });
       } catch {
         // A failed poll says nothing about the agent — leave the banner as it was.
       }
@@ -236,6 +240,20 @@ function InboxInner() {
             <span className="font-bold">The agent can&apos;t reply right now.</span> Guests are
             getting a holding message and their chats are going to staff.
             <span className="mt-1 block font-mono text-[10px] opacity-90">{aiDown.error}</span>
+            {/* A banner can outlive the problem — the agent only learns it has recovered on
+                its next call, and a chat parked with staff never makes one. Stamping the
+                failure lets staff see at a glance whether this is happening now or is the
+                last thing that happened. */}
+            {aiDown.at && (
+              <span className="mt-0.5 block text-[10px] opacity-70">
+                Last failed at{" "}
+                {new Date(aiDown.at).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+                . Clears as soon as a reply goes through.
+              </span>
+            )}
           </span>
         </div>
       )}
