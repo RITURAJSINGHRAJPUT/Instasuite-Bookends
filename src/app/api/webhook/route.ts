@@ -853,14 +853,26 @@ async function recordUsage(
   ai: Awaited<ReturnType<typeof getAIResponse>>
 ) {
   if (ai.provider === "none") return;
-  // Haiku 4.5 in cents per million tokens: $1 input, $5 output; prompt-cache writes cost 2x input
-  // (ai.ts uses the one-hour TTL — the 5-minute one is 1.25x) and reads 0.1x. The API reports cached tokens separately from input_tokens, so leaving
-  // them out would under-bill every reply that hits the cache.
+  // Cents per million tokens, by model. Keyed off ai.model rather than a constant so switching the
+  // model (Haiku -> Sonnet, Oct 2) doesn't silently halve every figure on the Settings and admin
+  // pages. An unknown id falls back to Sonnet's rates: over-stating the bill is the safer error.
+  // Prompt-cache writes cost 2x input (ai.ts uses the one-hour TTL — the 5-minute one is 1.25x) and
+  // reads 0.1x. The API reports cached tokens separately from input_tokens, so leaving them out
+  // would under-bill every reply that hits the cache.
+  const RATES: Record<string, { in: number; out: number }> = {
+    "claude-sonnet-5": { in: 200, out: 1000 },
+    "claude-haiku-4-5": { in: 100, out: 500 },
+  };
+  const rate = RATES[ai.model ?? ""] ?? RATES["claude-sonnet-5"];
   const cacheRead = ai.cacheReadTokens ?? 0;
   const cacheWrite = ai.cacheWriteTokens ?? 0;
   const costCents =
     ai.provider === "claude" && ai.inputTokens != null && ai.outputTokens != null
-      ? (ai.inputTokens * 100 + cacheWrite * 200 + cacheRead * 10 + ai.outputTokens * 500) / 1_000_000
+      ? (ai.inputTokens * rate.in +
+          cacheWrite * rate.in * 2 +
+          cacheRead * rate.in * 0.1 +
+          ai.outputTokens * rate.out) /
+        1_000_000
       : 0;
 
   await supabaseAdmin.from("usage_events").insert({

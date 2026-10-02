@@ -37,7 +37,14 @@ export type AIResult = {
 // per-tenant — so this client holds no tenant state and is safe to share. What must
 // never be module-scope is the system prompt: that is per-tenant, always passed in.
 const anthropic = new Anthropic();
-const DEFAULT_CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
+// Sonnet, not Haiku, because of a reasoning failure Haiku could not be prompted out of: asked for
+// a table at 8 PM today (Piplod serves dinner 6:00–10:30 PM) it refused the booking outright, then
+// narrated the check — "we're open 6:00 to 10:30 PM, so 8 PM falls right in that window" — and
+// staff had to take the chat over. Replaying that conversation: Haiku mentioned hours in 5 of 8
+// runs and a new REPLY_GUARD rule only moved it to 4 of 8, while the SAME request for tomorrow was
+// clean; Sonnet 5 was clean 8 of 8. The hours live as free text in each tenant's script, so no code
+// check can settle it — the model has to read them correctly.
+const DEFAULT_CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 
 // Shown to the guest whenever Claude can't answer. Paired with a human handoff by the
 // caller (see webhook), so "our team will get back to you" is truthful.
@@ -122,6 +129,16 @@ const REPLY_GUARD = [
   // then found the constraint didn't bind, and couldn't retract the word it had already emitted.
   // The guest is only ever owed the outcome of a check that actually blocks them.
   "Checks you run against hours, availability or internal rules are silent. When a request passes, say NOTHING about the check — never mention opening or closing times, kitchen timings, how far away the booking is, or that you verified anything. Speak about timing ONLY when the guest's request actually fails a rule, and then only about what they must change.",
+  // The rule above holds for a future date but kept collapsing on "today". Asked for a table at
+  // 8 PM today (Piplod closes 10:30 PM), the agent refused outright — "we can't take new orders
+  // that close to closing" — then, pushed, swung the other way and narrated the whole check:
+  // "we're open 6:00 to 10:30 PM, so 8 PM falls right in that window". Staff had to step in. In
+  // replays of that chat it mentioned hours in 5 of 8 runs, with claims as confused as "8:00 PM is
+  // after we close for the evening — Piplod wraps up at 10:30 PM"; the SAME request for tomorrow
+  // was clean 8 of 8. The script already says this (take closing-time bookings; never apply a
+  // takeaway cut-off to a reservation) and was ignored, so it is restated where every tenant gets
+  // it: "today" is the trigger, and nothing about today makes a booking harder to take.
+  "A booking for later today is ordinary: treat today exactly like any other date. There is no 'too soon', 'last order' or 'near closing' rule for a table reservation, and a takeaway/pickup cut-off NEVER applies to one. Judge a reservation only against that outlet's seating hours: if the time falls inside them, take it and say nothing at all about hours, kitchen timings, or how soon it is.",
   // "5/9/26" is 5 September, not 9 May. No script says so, so the model resolved it correctly and
   // then lost its nerve and asked the guest to confirm a date they had just written — which meant
   // it never finished the recap, never emitted the hand-off line, and no order was ever captured.
